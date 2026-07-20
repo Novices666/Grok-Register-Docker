@@ -108,6 +108,10 @@ func (p *PlaywrightBridge) Solve(ctx context.Context, siteKey, pageURL string) (
 	return out, nil
 }
 
+// DetectedPython / DetectedScript expose resolved mint paths for startup logs.
+func DetectedPython() string { return findPython() }
+func DetectedScript() string { return findMintScript() }
+
 func findPython() string {
 	for _, name := range []string{
 		os.Getenv("GROK_PYTHON"),
@@ -158,6 +162,7 @@ func findMintScript() string {
 	}
 	// common install locations
 	candidates = append(candidates,
+		"/opt/Grok-Register/scripts/turnstile_mint.py",
 		"/opt/Grok-Reg/scripts/turnstile_mint.py",
 		"/usr/local/share/grok-reg/turnstile_mint.py",
 	)

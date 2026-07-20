@@ -119,15 +119,25 @@ func (c *chain) Name() string { return c.name }
 
 func (c *chain) Solve(ctx context.Context, siteKey, pageURL string) (string, error) {
 	var last error
+	var errs []string
 	for _, p := range c.list {
 		tok, err := p.Solve(ctx, siteKey, pageURL)
 		if err == nil && len(tok) > 10 {
 			return tok, nil
 		}
-		last = err
+		if err != nil {
+			last = err
+			errs = append(errs, fmt.Sprintf("%s: %v", p.Name(), err))
+		} else {
+			last = fmt.Errorf("%s: empty token", p.Name())
+			errs = append(errs, last.Error())
+		}
 	}
 	if last == nil {
 		last = fmt.Errorf("no provider")
+	}
+	if len(errs) > 1 {
+		return "", fmt.Errorf("%s", strings.Join(errs, " | "))
 	}
 	return "", last
 }

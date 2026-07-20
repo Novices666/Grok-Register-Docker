@@ -161,6 +161,7 @@ func (e *Engine) run(ctx context.Context) error {
 		defer c.Close()
 	}
 	log.Infof("Turnstile provider=%s (Playwright mint preferred, chromedp fallback)", e.turn.Name())
+	log.Infof("Turnstile mint: python=%s script=%s", turnstile.DetectedPython(), turnstile.DetectedScript())
 	e.uploader = cpa.NewUploader(cpa.UploadConfig{
 		Enabled:      cfg.CPAUploadEnabled,
 		BaseURL:      cfg.CPAManagementBase,
@@ -335,9 +336,7 @@ func (e *Engine) sWorker(ctx context.Context, id int, scfg protocol.SignupConfig
 		tok, err := e.turn.Solve(ctx, scfg.SiteKey, pageURL)
 		e.phys.Release()
 		if err != nil {
-			log.Debugf("[S%d] turnstile: %v", id, err)
-			// Put a synthetic empty token path: still need tokens for C.
-			// Retry after short sleep.
+			log.Warnf("[S%d] turnstile: %v", id, err)
 			select {
 			case <-ctx.Done():
 				return
@@ -348,7 +347,7 @@ func (e *Engine) sWorker(ctx context.Context, id int, scfg protocol.SignupConfig
 		if err := e.inv.PutT(ctx, tok, 5*time.Minute); err != nil {
 			return
 		}
-		log.Debugf("[S%d] token ok", id)
+		log.Infof("[S%d] token ok (len=%d)", id, len(tok))
 	}
 }
 
