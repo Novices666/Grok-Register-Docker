@@ -12,6 +12,23 @@ import (
 	"testing"
 )
 
+func TestNormalizeManagementBase(t *testing.T) {
+	cases := map[string]string{
+		"http://cli-proxy-api:8317":                    "http://127.0.0.1:8317/v0/management",
+		"http://cli-proxy-api:8317/":                   "http://127.0.0.1:8317/v0/management",
+		"http://cli-proxy-api:8317/v0/management":      "http://127.0.0.1:8317/v0/management",
+		"http://127.0.0.1:8317":                        "http://127.0.0.1:8317/v0/management",
+		"http://127.0.0.1:8317/v0/management":          "http://127.0.0.1:8317/v0/management",
+		"http://localhost:8317/v0/management":          "http://localhost:8317/v0/management",
+	}
+	for in, want := range cases {
+		got := NormalizeManagementBase(in)
+		if got != want {
+			t.Fatalf("NormalizeManagementBase(%q)=%q want %q", in, got, want)
+		}
+	}
+}
+
 func TestUploadName(t *testing.T) {
 	doc := Document{Email: "a@b.com", Sub: "sub1"}
 	n := UploadName(doc, "{email}.json")

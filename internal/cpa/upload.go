@@ -60,6 +60,7 @@ func NewUploader(cfg UploadConfig, logf func(string, ...any)) *Uploader {
 	if to <= 0 {
 		to = 30 * time.Second
 	}
+	cfg.BaseURL = NormalizeManagementBase(cfg.BaseURL)
 	return &Uploader{
 		cfg: cfg,
 		client: &http.Client{
@@ -69,6 +70,53 @@ func NewUploader(cfg UploadConfig, logf func(string, ...any)) *Uploader {
 		},
 		logf: logf,
 	}
+}
+
+// NormalizeManagementBase rewrites Docker-only hostnames for host-side grok,
+// and ensures the path ends with /v0/management (upload appends /auth-files).
+//
+// Examples:
+//
+//	http://cli-proxy-api:8317          → http://127.0.0.1:8317/v0/management
+//	http://localhost:8317             → http://localhost:8317/v0/management
+//	http://127.0.0.1:8317/v0/management → unchanged
+func NormalizeManagementBase(raw string) string {
+	s := strings.TrimSpace(raw)
+	if s == "" {
+		return s
+	}
+	// Docker compose service names are not resolvable from the host.
+	for _, host := range []string{
+		"cli-proxy-api",
+		"cpa-public-proxy",
+		"cpa-manager-plus",
+		"cpa-helper",
+	} {
+		// http://host:port... or http://host/...
+		s = strings.ReplaceAll(s, "://"+host+":", "://127.0.0.1:")
+		s = strings.ReplaceAll(s, "://"+host+"/", "://127.0.0.1/")
+		if strings.HasSuffix(s, "://"+host) {
+			s = strings.TrimSuffix(s, host) + "127.0.0.1"
+		}
+	}
+	u, err := url.Parse(s)
+	if err != nil || u.Scheme == "" || u.Host == "" {
+		return strings.TrimRight(s, "/")
+	}
+	path := strings.TrimRight(u.Path, "/")
+	if path == "" || path == "/" {
+		u.Path = "/v0/management"
+	} else if !strings.HasSuffix(path, "/v0/management") && !strings.Contains(path, "/management") {
+		// base is host:port only or unknown path — append management prefix
+		if path == "" {
+			u.Path = "/v0/management"
+		} else {
+			u.Path = path + "/v0/management"
+		}
+	} else {
+		u.Path = path
+	}
+	return strings.TrimRight(u.String(), "/")
 }
 
 func (u *Uploader) Enabled() bool {

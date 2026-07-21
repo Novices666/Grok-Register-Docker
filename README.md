@@ -160,7 +160,8 @@ PROBE_ENABLED=1
 
 # CPA 自动上传（可选）
 CPA_UPLOAD_ENABLED=0
-CPA_MANAGEMENT_BASE=http://localhost:8317/v0/management
+# 宿主机访问映射口；不要写 docker 服务名 cli-proxy-api
+CPA_MANAGEMENT_BASE=http://127.0.0.1:8317/v0/management
 CPA_MANAGEMENT_KEY=
 CPA_UPLOAD_TIMEOUT_SEC=30
 CPA_UPLOAD_RETRIES=2
