@@ -253,33 +253,30 @@ func (c *Client) SignupServerAction(body []byte, actionID, stateTree string) (st
 	}
 	defer resp.Body.Close()
 	text, _ := readBody(resp)
-	sso := ""
-	// Prefer Set-Cookie on this response (jar may hold polluted prior sso).
-	for _, sc := range resp.Cookies() {
-		if sc.Name == "sso" && sc.Value != "" {
-			sso = sc.Value
-		}
-	}
-	if sso == "" {
-		u, _ := url.Parse(SiteURL)
-		for _, ck := range c.http.Jar.Cookies(u) {
-			if ck.Name == "sso" && ck.Value != "" {
-				sso = ck.Value
+
+	// 1) Direct Set-Cookie sso on the action response (session JWT only).
+	sso := sessionSSOFromCookies(resp.Cookies())
+	// 2) Follow set-cookie hop chain from RSC body (required path for most accounts).
+	if !isSessionSSO(sso) {
+		for _, hop := range expandSSOHopURLs(extractAllSetCookieURLs(text)) {
+			if v, err := c.followSSOHop(hop); err == nil && isSessionSSO(v) {
+				sso = v
+				break
 			}
 		}
 	}
-	if sso == "" {
-		if m := ExtractSSOFromText(text); m != "" {
+	// 3) Jar after hops (accounts.x.ai / .x.ai).
+	if !isSessionSSO(sso) {
+		sso = c.jarSSO()
+	}
+	// 4) Explicit sso=JWT in body (not hop config JWT).
+	if !isSessionSSO(sso) {
+		if m := ExtractSSOFromText(text); isSessionSSO(m) {
 			sso = m
 		}
 	}
-	// Follow set-cookie hop URLs embedded in RSC flight if any.
-	if sso == "" {
-		if hop := extractSetCookieURL(text); hop != "" {
-			if v, err := c.followSSOHop(hop); err == nil && v != "" {
-				sso = v
-			}
-		}
+	if !isSessionSSO(sso) {
+		sso = ""
 	}
 	if resp.StatusCode >= 400 {
 		return text, sso, fmt.Errorf("signup http=%d body=%s", resp.StatusCode, truncate(text, 200))
@@ -287,43 +284,260 @@ func (c *Client) SignupServerAction(body []byte, actionID, stateTree string) (st
 	return text, sso, nil
 }
 
-func (c *Client) followSSOHop(hop string) (string, error) {
-	req, err := http.NewRequest(http.MethodGet, hop, nil)
-	if err != nil {
-		return "", err
-	}
-	c.setBrowserHeaders(req)
-	resp, err := c.http.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<20))
-	for _, sc := range resp.Cookies() {
-		if sc.Name == "sso" && sc.Value != "" {
-			return sc.Value, nil
+// followSSOHop walks set-cookie redirects manually so intermediate Set-Cookie is kept.
+func (c *Client) followSSOHop(start string) (string, error) {
+	hops := expandSSOHopURLs([]string{start})
+	seen := map[string]struct{}{}
+	for i := 0; i < len(hops) && i < 10; i++ {
+		hop := hops[i]
+		if hop == "" {
+			continue
+		}
+		if _, ok := seen[hop]; ok {
+			continue
+		}
+		seen[hop] = struct{}{}
+
+		req, err := http.NewRequest(http.MethodGet, hop, nil)
+		if err != nil {
+			continue
+		}
+		c.setBrowserHeaders(req)
+		req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+		req.Header.Set("Referer", SiteURL+"/")
+		req.Header.Set("Sec-Fetch-Site", "cross-site")
+		req.Header.Set("Sec-Fetch-Mode", "navigate")
+		req.Header.Set("Sec-Fetch-Dest", "document")
+		req.Header.Set("Upgrade-Insecure-Requests", "1")
+
+		// Manual redirect walk — auto-follow can drop intermediate sso cookies.
+		client := *c.http
+		client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
+		}
+		resp, err := client.Do(req)
+		if err != nil {
+			continue
+		}
+		body, _ := readBody(resp)
+		_ = resp.Body.Close()
+
+		if v := sessionSSOFromCookies(resp.Cookies()); isSessionSSO(v) {
+			return v, nil
+		}
+		if v := ExtractSSOFromText(body); isSessionSSO(v) {
+			return v, nil
+		}
+		if v := c.jarSSO(); isSessionSSO(v) {
+			return v, nil
+		}
+
+		loc := resp.Header.Get("Location")
+		if loc == "" {
+			continue
+		}
+		if strings.HasPrefix(loc, "/") {
+			if strings.Contains(hop, "grokusercontent") {
+				loc = "https://auth.grokusercontent.com" + loc
+			} else {
+				loc = SiteURL + loc
+			}
+		}
+		if resp.StatusCode >= 300 && resp.StatusCode < 400 && strings.HasPrefix(loc, "http") {
+			if _, ok := seen[loc]; !ok {
+				hops = append(hops, expandSSOHopURLs([]string{loc})...)
+			}
 		}
 	}
-	u, _ := url.Parse(SiteURL)
-	for _, ck := range c.http.Jar.Cookies(u) {
-		if ck.Name == "sso" && ck.Value != "" {
-			return ck.Value, nil
-		}
+	if v := c.jarSSO(); isSessionSSO(v) {
+		return v, nil
 	}
 	return "", nil
 }
 
-var setCookieURLRe = regexp.MustCompile(`https?://[^\s"'\\]+set-cookie[^\s"'\\]*`)
-
-func extractSetCookieURL(text string) string {
-	m := setCookieURLRe.FindString(text)
-	if m == "" {
-		return ""
+func (c *Client) jarSSO() string {
+	for _, host := range []string{SiteURL, "https://x.ai", "https://auth.x.ai", "https://grok.com"} {
+		u, _ := url.Parse(host)
+		for _, ck := range c.http.Jar.Cookies(u) {
+			if ck.Name == "sso" && isSessionSSO(ck.Value) {
+				return ck.Value
+			}
+		}
 	}
-	m = strings.ReplaceAll(m, `\u0026`, "&")
-	m = strings.ReplaceAll(m, `\u003d`, "=")
-	m = strings.ReplaceAll(m, `\u002F`, "/")
+	return ""
+}
+
+func sessionSSOFromCookies(cks []*http.Cookie) string {
+	for _, sc := range cks {
+		if sc.Name == "sso" && isSessionSSO(sc.Value) {
+			return sc.Value
+		}
+	}
+	return ""
+}
+
+// isSessionSSO rejects hop-config JWTs (config.token / success_url) used only for set-cookie URLs.
+func isSessionSSO(tok string) bool {
+	if tok == "" || !strings.HasPrefix(tok, "eyJ") || strings.Count(tok, ".") != 2 {
+		return false
+	}
+	// Hop config JWT payload contains success_url / config.token — not a session.
+	payload := jwtPayloadMap(tok)
+	if payload == nil {
+		// still accept long eyJ tokens if we can't decode (rare)
+		return len(tok) > 80
+	}
+	if cfg, ok := payload["config"].(map[string]any); ok {
+		if _, ok := cfg["success_url"]; ok {
+			return false
+		}
+		if _, ok := cfg["token"]; ok {
+			return false
+		}
+	}
+	if _, ok := payload["success_url"]; ok {
+		return false
+	}
+	// Real session tokens typically carry sub / sid / session-ish claims or are long opaque JWTs.
+	return len(tok) > 40
+}
+
+func jwtPayloadMap(token string) map[string]any {
+	parts := strings.Split(token, ".")
+	if len(parts) != 3 {
+		return nil
+	}
+	payload := parts[1]
+	switch len(payload) % 4 {
+	case 2:
+		payload += "=="
+	case 3:
+		payload += "="
+	}
+	raw, err := base64.URLEncoding.DecodeString(payload)
+	if err != nil {
+		raw, err = base64.RawURLEncoding.DecodeString(parts[1])
+		if err != nil {
+			return nil
+		}
+	}
+	var m map[string]any
+	if json.Unmarshal(raw, &m) != nil {
+		return nil
+	}
 	return m
+}
+
+var (
+	setCookieURLRe = regexp.MustCompile(
+		`https?://[^\s"'<>\\]+set-cookie/?\?q=eyJ[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+`,
+	)
+	setCookieRelRe = regexp.MustCompile(
+		`(/[A-Za-z0-9_./-]*set-cookie/?\?q=eyJ[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+)`,
+	)
+	jwtRe = regexp.MustCompile(`eyJ[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+`)
+)
+
+func normalizeRSC(text string) string {
+	t := text
+	t = strings.ReplaceAll(t, `\u0026`, "&")
+	t = strings.ReplaceAll(t, `\u003d`, "=")
+	t = strings.ReplaceAll(t, `\u002F`, "/")
+	t = strings.ReplaceAll(t, `\/`, `/`)
+	return t
+}
+
+func extractAllSetCookieURLs(text string) []string {
+	body := normalizeRSC(text)
+	var found []string
+	seen := map[string]struct{}{}
+	add := func(u string) {
+		u = strings.TrimSpace(u)
+		if u == "" {
+			return
+		}
+		if _, ok := seen[u]; ok {
+			return
+		}
+		seen[u] = struct{}{}
+		found = append(found, u)
+	}
+	for _, m := range setCookieURLRe.FindAllString(body, -1) {
+		add(m)
+	}
+	for _, m := range setCookieRelRe.FindAllStringSubmatch(body, -1) {
+		if len(m) > 1 {
+			add(SiteURL + m[1])
+		}
+	}
+	if len(found) == 0 {
+		// reconstruct hop from bare JWT near set-cookie marker
+		if idx := strings.Index(strings.ToLower(body), "set-cookie"); idx >= 0 {
+			window := body[idx:]
+			if len(window) > 400 {
+				window = window[:400]
+			}
+			if j := jwtRe.FindString(window); j != "" {
+				add("https://auth.grokusercontent.com/set-cookie?q=" + j)
+			}
+		}
+	}
+	return found
+}
+
+func expandSSOHopURLs(urls []string) []string {
+	var out []string
+	seen := map[string]struct{}{}
+	add := func(u string) {
+		if u == "" {
+			return
+		}
+		if _, ok := seen[u]; ok {
+			return
+		}
+		seen[u] = struct{}{}
+		out = append(out, u)
+	}
+	for _, u := range urls {
+		add(u)
+		jwt := jwtFromSetCookieURL(u)
+		if jwt == "" {
+			continue
+		}
+		if payload := jwtPayloadMap(jwt); payload != nil {
+			if cfg, ok := payload["config"].(map[string]any); ok {
+				if s, ok := cfg["success_url"].(string); ok && strings.HasPrefix(s, "https://") {
+					add(s)
+					if strings.Contains(s, "set-cookie") && !strings.Contains(s, "q=") {
+						add(strings.TrimRight(s, "/") + "?q=" + jwt)
+					}
+				}
+			}
+			if s, ok := payload["success_url"].(string); ok && strings.HasPrefix(s, "https://") {
+				add(s)
+			}
+		}
+		add("https://auth.grokusercontent.com/set-cookie?q=" + jwt)
+	}
+	return out
+}
+
+func jwtFromSetCookieURL(u string) string {
+	raw, err := url.QueryUnescape(u)
+	if err != nil {
+		raw = u
+	}
+	// ?q=eyJ...
+	if i := strings.Index(raw, "q="); i >= 0 {
+		rest := raw[i+2:]
+		if j := strings.IndexAny(rest, "&\"' "); j >= 0 {
+			rest = rest[:j]
+		}
+		if strings.HasPrefix(rest, "eyJ") {
+			return rest
+		}
+	}
+	return jwtRe.FindString(raw)
 }
 
 func (c *Client) ClearAuthCookies() {
@@ -531,19 +745,23 @@ func truncate(s string, n int) string {
 	return s[:n]
 }
 
-// ExtractSSOFromText tries to find sso JWT in response body.
+// ExtractSSOFromText finds an embedded sso=JWT (session) in RSC/HTML body.
 func ExtractSSOFromText(text string) string {
-	// JWT-ish
-	re := regexp.MustCompile(`eyJ[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+`)
-	for _, m := range re.FindAllString(text, -1) {
-		// Prefer session-looking tokens
-		if strings.Contains(m, "session") || len(m) > 80 {
+	body := normalizeRSC(text)
+	// sso=eyJ...
+	reNamed := regexp.MustCompile(`(?i)(?:^|[;,\s'"\\])sso=(eyJ[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+)`)
+	if m := reNamed.FindStringSubmatch(body); len(m) > 1 && isSessionSSO(m[1]) {
+		return m[1]
+	}
+	// near session/sso markers
+	reNear := regexp.MustCompile(`(?i)(?:sso|session)[^e]{0,40}(eyJ[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+)`)
+	if m := reNear.FindStringSubmatch(body); len(m) > 1 && isSessionSSO(m[1]) {
+		return m[1]
+	}
+	for _, m := range jwtRe.FindAllString(body, -1) {
+		if isSessionSSO(m) {
 			return m
 		}
 	}
-	if m := re.FindString(text); m != "" {
-		return m
-	}
-	_ = base64.StdEncoding // keep import used if needed later
 	return ""
 }
