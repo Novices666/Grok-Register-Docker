@@ -40,21 +40,30 @@ grok upload                # 手动上传 CPA JSON 到 Management API
 
 会拉源码、编译 CLI、装 Playwright/CloakBrowser、起 clearance，并写入**分区中文注释**的 `config.env`（与 `config.env.example` 同模板）。
 
-### 交互询问路径 / 命令名
+### 交互询问
 
-有真实 TTY 时（SSH 终端直接跑，或 `bash -s` 且 stdin 是终端）会提示：
+有真实 TTY 时会依次提示：
 
-- CLI 命令名（默认 `grok`）
-- 源码目录、数据目录 `GROK_HOME`、二进制目录、venv 目录  
+1. CLI 命令名 / 源码目录 / 数据目录 / 二进制 / venv  
+2. **是否启用 WARP 清障栈？** `[Y]`  
+   - **Y（默认）**：起 Docker 清障，`REGISTER_PROXY=http://127.0.0.1:40080`  
+   - **N**：不装清障；再问 **本机 HTTP 代理端口**  
+     - 输入如 `7890` → `REGISTER_PROXY=http://127.0.0.1:7890`，`CLEARANCE_ENABLED=0`  
+     - **直接回车** → 直连（无代理，适合能访问 x.ai 的境外 VPS）
 
-直接回车 = 默认。无 TTY 的 `curl|sudo bash` 可能无法提问，此时：
+无 TTY 的 `curl|sudo bash` 可能无法提问，此时：
 
 ```bash
-# 显式指定（推荐）
-curl -fsSL .../install.sh | sudo bash -s -- \
-  --command grok --install-dir /opt/Grok-Register --home /home/你的用户/.grok
+# WARP 清障（默认）
+curl -fsSL .../install.sh | sudo bash -s -- --with-warp
 
-# 或强制全默认
+# 本机 Clash 等代理
+curl -fsSL .../install.sh | sudo bash -s -- --no-warp --proxy-port 7890
+
+# 境外 VPS 直连
+curl -fsSL .../install.sh | sudo bash -s -- --no-warp
+
+# 强制全默认（WARP）
 curl -fsSL .../install.sh | sudo NONINTERACTIVE=1 bash
 ```
 

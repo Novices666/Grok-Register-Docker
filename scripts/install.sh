@@ -53,6 +53,10 @@ SKIP_GO_INSTALL="${SKIP_GO_INSTALL:-0}"
 START_CLEARANCE="${START_CLEARANCE:-1}"
 # 0=有 TTY 时询问路径/命令名；1=全默认（CI）
 NONINTERACTIVE="${NONINTERACTIVE:-0}"
+# 网络出口: warp | proxy | none（默认 warp，交互可改）
+NET_MODE="${NET_MODE:-}"
+# 本机 HTTP 代理端口（NET_MODE=proxy 时用）；空=直连
+LOCAL_PROXY_PORT="${LOCAL_PROXY_PORT:-}"
 
 # 环境变量是否在进脚本前已显式设置（显式则不再交互问该项）
 _ENV_COMMAND_NAME="${COMMAND_NAME-}"
@@ -61,6 +65,8 @@ _ENV_GROK_HOME="${GROK_HOME-}"
 _ENV_BIN_DIR="${BIN_DIR-}"
 _ENV_SHARE_DIR="${SHARE_DIR-}"
 _ENV_VENV_DIR="${VENV_DIR-}"
+_ENV_NET_MODE="${NET_MODE-}"
+_ENV_LOCAL_PROXY_PORT="${LOCAL_PROXY_PORT-}"
 
 SET_COMMAND=0
 SET_INSTALL_DIR=0
@@ -68,6 +74,7 @@ SET_HOME=0
 SET_BIN_DIR=0
 SET_SHARE_DIR=0
 SET_VENV_DIR=0
+SET_NET_MODE=0
 # 非默认命令名视为用户已指定
 [ -n "$_ENV_COMMAND_NAME" ] && [ "$_ENV_COMMAND_NAME" != "grok" ] && SET_COMMAND=1
 [ -n "$_ENV_INSTALL_DIR" ] && SET_INSTALL_DIR=1
@@ -75,6 +82,12 @@ SET_VENV_DIR=0
 [ -n "$_ENV_BIN_DIR" ] && SET_BIN_DIR=1
 [ -n "$_ENV_SHARE_DIR" ] && SET_SHARE_DIR=1
 [ -n "$_ENV_VENV_DIR" ] && SET_VENV_DIR=1
+[ -n "$_ENV_NET_MODE" ] && SET_NET_MODE=1
+# 仅传了端口 → 视为 proxy 模式
+if [ -z "$_ENV_NET_MODE" ] && [ -n "$_ENV_LOCAL_PROXY_PORT" ]; then
+  NET_MODE=proxy
+  SET_NET_MODE=1
+fi
 
 if [ "$OS" = "darwin" ]; then
   _HOME="${HOME:-/Users/$(id -un)}"
@@ -101,8 +114,13 @@ Grok-Register 一键部署
          默认装到用户目录（无需 sudo）
 
 交互:
-  终端有 TTY 时会询问命令名 / 安装目录 / 数据目录（直接回车=默认）。
-  curl|bash 且无 TTY，或 NONINTERACTIVE=1 / --yes，则全用默认值。
+  终端有 TTY 时会询问命令名 / 安装目录 / 数据目录，以及是否启用 WARP 清障。
+  curl|bash 且无 TTY，或 NONINTERACTIVE=1 / --yes，则全用默认值（WARP 清障）。
+
+网络出口（交互或 CLI）:
+  Y / 默认     — 启用 Docker WARP+Privoxy 清障（REGISTER_PROXY=…:40080）
+  N            — 不用清障；可再输入本机 HTTP 代理端口（如 7890）；
+                 端口直接回车 = 直连（境外 VPS 无代理）
 
 用法:
   install.sh [选项]
@@ -117,17 +135,21 @@ Grok-Register 一键部署
   --repo URL            Git 仓库
   --branch NAME         分支（默认 main）
   --go-version VER      Linux 官方 tarball Go 版本
+  --with-warp           使用 WARP 清障栈（默认）
+  --no-warp             不使用清障；可配合 --proxy-port
+  --proxy-port PORT     本机 HTTP 代理端口（隐含 --no-warp），如 7890
   --skip-docker         不安装/不检查 Docker
-  --skip-clearance      不起 clearance
+  --skip-clearance      同 --no-warp 且不起 compose
   --skip-browser        不装 Playwright/CloakBrowser
   --skip-go             不自动安装 Go
-  --no-start-clearance  不 docker compose up
+  --no-start-clearance  装清障但不 docker compose up
   --yes / -y            非交互，全部默认
   -h, --help            帮助
 
 示例:
   curl -fsSL .../install.sh | sudo bash
-  curl -fsSL .../install.sh | sudo bash -s -- --command grok-reg --home /home/ubuntu/.grok
+  curl -fsSL .../install.sh | sudo bash -s -- --no-warp --proxy-port 7890
+  curl -fsSL .../install.sh | sudo bash -s -- --no-warp          # 直连
   curl -fsSL .../install.sh | sudo NONINTERACTIVE=1 bash
   # macOS
   curl -fsSL .../install.sh | bash
@@ -153,8 +175,18 @@ while [ $# -gt 0 ]; do
     --repo) REPO_URL="$2"; shift 2 ;;
     --branch) BRANCH="$2"; shift 2 ;;
     --go-version) GO_VERSION="$2"; shift 2 ;;
+    --with-warp) NET_MODE=warp; SET_NET_MODE=1; shift ;;
+    --no-warp) NET_MODE=none; SET_NET_MODE=1; SKIP_CLEARANCE=1; START_CLEARANCE=0; shift ;;
+    --proxy-port)
+      LOCAL_PROXY_PORT="$2"
+      NET_MODE=proxy
+      SET_NET_MODE=1
+      SKIP_CLEARANCE=1
+      START_CLEARANCE=0
+      shift 2
+      ;;
     --skip-docker) SKIP_DOCKER=1; shift ;;
-    --skip-clearance) SKIP_CLEARANCE=1; START_CLEARANCE=0; shift ;;
+    --skip-clearance) SKIP_CLEARANCE=1; START_CLEARANCE=0; NET_MODE=none; SET_NET_MODE=1; shift ;;
     --skip-browser) SKIP_BROWSER=1; shift ;;
     --skip-go) SKIP_GO_INSTALL=1; shift ;;
     --no-start-clearance) START_CLEARANCE=0; shift ;;
@@ -211,13 +243,121 @@ prompt_value() {
   printf -v "$__var" '%s' "$__ans"
 }
 
+# 允许空默认（回车 = 空字符串）
+prompt_value_allow_empty() {
+  local __var="$1" __msg="$2" __ans=""
+  if [ ! -r /dev/tty ] || [ ! -w /dev/tty ]; then
+    printf -v "$__var" '%s' ""
+    return 0
+  fi
+  printf '%s: ' "$__msg" >/dev/tty
+  IFS= read -r __ans </dev/tty || true
+  printf -v "$__var" '%s' "$__ans"
+}
+
+apply_net_mode_flags() {
+  case "${NET_MODE}" in
+    warp|"")
+      NET_MODE=warp
+      SKIP_CLEARANCE=0
+      # START_CLEARANCE 保持调用方设置（可用 --no-start-clearance）
+      if [ "${START_CLEARANCE}" != 0 ]; then
+        START_CLEARANCE=1
+      fi
+      ;;
+    proxy)
+      SKIP_CLEARANCE=1
+      START_CLEARANCE=0
+      case "${LOCAL_PROXY_PORT}" in
+        ''|*[!0-9]*) die "代理端口无效: '${LOCAL_PROXY_PORT}'（请给 1-65535 的数字）" ;;
+      esac
+      if [ "${LOCAL_PROXY_PORT}" -lt 1 ] || [ "${LOCAL_PROXY_PORT}" -gt 65535 ]; then
+        die "代理端口超出范围: ${LOCAL_PROXY_PORT}"
+      fi
+      ;;
+    none|direct)
+      NET_MODE=none
+      SKIP_CLEARANCE=1
+      START_CLEARANCE=0
+      LOCAL_PROXY_PORT=""
+      ;;
+    *)
+      die "未知 NET_MODE=${NET_MODE}（warp|proxy|none）"
+      ;;
+  esac
+}
+
+prompt_network_exit() {
+  # 交互：是否 WARP 清障；N 则问代理端口
+  if [ "$SET_NET_MODE" = 1 ]; then
+    apply_net_mode_flags
+    return 0
+  fi
+  if [ "$NONINTERACTIVE" = 1 ] || [ ! -r /dev/tty ] || [ ! -w /dev/tty ]; then
+    NET_MODE=warp
+    apply_net_mode_flags
+    return 0
+  fi
+
+  echo >/dev/tty
+  echo "----------------------------------------------" >/dev/tty
+  echo " 网络出口（WARP 清障 vs 本机代理 vs 直连）" >/dev/tty
+  echo "----------------------------------------------" >/dev/tty
+  echo "  Y — 使用项目 Docker 清障栈（WARP+Privoxy，端口 40080）【默认】" >/dev/tty
+  echo "  N — 不用清障：境外 VPS 直连，或填写本机已有代理端口（如 Clash 7890）" >/dev/tty
+  echo >/dev/tty
+
+  local yn="Y"
+  prompt_value yn "是否启用 WARP 清障栈" "Y"
+  case "$(printf '%s' "$yn" | tr '[:upper:]' '[:lower:]')" in
+    y|yes|是|1|"")
+      NET_MODE=warp
+      ;;
+    n|no|否|0)
+      echo >/dev/tty
+      echo "  不使用清障。若本机有 HTTP 代理请输入端口数字（如 7890）；" >/dev/tty
+      echo "  直接回车 = 不使用任何代理（直连，适合能访问 x.ai 的境外机器）。" >/dev/tty
+      local port=""
+      prompt_value_allow_empty port "本机 HTTP 代理端口（回车=直连）"
+      port="$(printf '%s' "$port" | tr -d '[:space:]')"
+      if [ -z "$port" ]; then
+        NET_MODE=none
+        LOCAL_PROXY_PORT=""
+      else
+        case "$port" in
+          *[!0-9]*) die "端口必须是数字，得到: $port" ;;
+        esac
+        if [ "$port" -lt 1 ] || [ "$port" -gt 65535 ]; then
+          die "端口超出范围: $port"
+        fi
+        NET_MODE=proxy
+        LOCAL_PROXY_PORT="$port"
+      fi
+      ;;
+    *)
+      warn "无法识别「$yn」，按默认启用 WARP 清障"
+      NET_MODE=warp
+      ;;
+  esac
+  apply_net_mode_flags
+}
+
 maybe_prompt_paths() {
   if [ "$NONINTERACTIVE" = 1 ]; then
     log "非交互模式：使用默认/参数路径"
+    if [ "$SET_NET_MODE" != 1 ]; then
+      NET_MODE=warp
+    fi
+    apply_net_mode_flags
     return 0
   fi
   if [ ! -r /dev/tty ] || [ ! -w /dev/tty ]; then
-    warn "无 TTY（常见于 curl|bash 无伪终端），使用默认路径；可用 --command / --install-dir / --home 覆盖"
+    warn "无 TTY（常见于 curl|bash 无伪终端），使用默认路径 + WARP 清障"
+    warn "可用: --command / --install-dir / --home / --no-warp / --proxy-port 7890"
+    if [ "$SET_NET_MODE" != 1 ]; then
+      NET_MODE=warp
+    fi
+    apply_net_mode_flags
     return 0
   fi
 
@@ -244,10 +384,8 @@ maybe_prompt_paths() {
   if [ "$SET_VENV_DIR" != 1 ]; then
     prompt_value VENV_DIR "Python venv 目录" "$VENV_DIR"
   fi
-  # share 默认跟 bin 同 PREFIX 语义：Linux /usr/local/share；已设则跳过
-  if [ "$SET_SHARE_DIR" != 1 ] && [ "$OS" = "linux" ]; then
-    :
-  fi
+
+  prompt_network_exit
 
   echo >/dev/tty
   ok "将使用:"
@@ -256,6 +394,17 @@ maybe_prompt_paths() {
   echo "  数据:   $GROK_HOME_OPT" >/dev/tty
   echo "  二进制: $BIN_DIR/$COMMAND_NAME" >/dev/tty
   echo "  venv:   $VENV_DIR" >/dev/tty
+  case "$NET_MODE" in
+    warp)
+      echo "  网络:   WARP 清障栈 (REGISTER_PROXY=http://127.0.0.1:40080)" >/dev/tty
+      ;;
+    proxy)
+      echo "  网络:   本机代理 http://127.0.0.1:${LOCAL_PROXY_PORT}（无清障）" >/dev/tty
+      ;;
+    none)
+      echo "  网络:   直连（无代理、无清障）" >/dev/tty
+      ;;
+  esac
   echo >/dev/tty
 }
 
@@ -264,6 +413,65 @@ maybe_prompt_paths
 # ---------------------------------------------------------------------------
 # 公共：从仓库 example 种子化 config.env（分区 + 中文注释）
 # ---------------------------------------------------------------------------
+# 在 .env 文件中设置 KEY=VALUE（无则追加）
+env_set_key() {
+  local file="$1" key="$2" value="$3"
+  local tmp
+  tmp="$(mktemp)"
+  if [ ! -f "$file" ]; then
+    printf '%s=%s\n' "$key" "$value" >"$file"
+    return 0
+  fi
+  if grep -qE "^${key}=" "$file" 2>/dev/null; then
+    # 跨 sed -i 实现
+    awk -v k="$key" -v v="$value" '
+      BEGIN { p=k"=" }
+      index($0, p)==1 && substr($0,1,length(p))==p { print k"="v; next }
+      { print }
+    ' "$file" >"$tmp" && mv "$tmp" "$file"
+  elif grep -qE "^#[[:space:]]*${key}=" "$file" 2>/dev/null; then
+    awk -v k="$key" -v v="$value" '
+      {
+        line=$0
+        sub(/^#[[:space:]]*/, "", line)
+        if (index(line, k"=")==1) { print k"="v; next }
+        print
+      }
+    ' "$file" >"$tmp" && mv "$tmp" "$file"
+  else
+    printf '%s=%s\n' "$key" "$value" >>"$file"
+    rm -f "$tmp"
+  fi
+}
+
+apply_network_to_config() {
+  # 按 NET_MODE 写入 REGISTER_PROXY / HTTP(S)_PROXY / CLEARANCE_ENABLED
+  local dest="$1"
+  case "$NET_MODE" in
+    warp)
+      env_set_key "$dest" "CLEARANCE_ENABLED" "1"
+      env_set_key "$dest" "REGISTER_PROXY" "http://127.0.0.1:40080"
+      env_set_key "$dest" "HTTP_PROXY" "http://127.0.0.1:40080"
+      env_set_key "$dest" "HTTPS_PROXY" "http://127.0.0.1:40080"
+      env_set_key "$dest" "FLARESOLVERR_URL" "http://127.0.0.1:8191"
+      env_set_key "$dest" "CLEARANCE_PROXY" "http://privoxy:8118"
+      ;;
+    proxy)
+      env_set_key "$dest" "CLEARANCE_ENABLED" "0"
+      env_set_key "$dest" "REGISTER_PROXY" "http://127.0.0.1:${LOCAL_PROXY_PORT}"
+      env_set_key "$dest" "HTTP_PROXY" "http://127.0.0.1:${LOCAL_PROXY_PORT}"
+      env_set_key "$dest" "HTTPS_PROXY" "http://127.0.0.1:${LOCAL_PROXY_PORT}"
+      ;;
+    none)
+      env_set_key "$dest" "CLEARANCE_ENABLED" "0"
+      env_set_key "$dest" "REGISTER_PROXY" ""
+      env_set_key "$dest" "HTTP_PROXY" ""
+      env_set_key "$dest" "HTTPS_PROXY" ""
+      ;;
+  esac
+  env_set_key "$dest" "NO_PROXY" "127.0.0.1,localhost"
+}
+
 seed_config_from_example() {
   local dest="$1"
   local example=""
@@ -300,26 +508,23 @@ CPA_UPLOAD_NAME_TEMPLATE={email}.json
 CPA_UPLOAD_VERIFY=1
 CPA_UPLOAD_MODE=multipart
 EOF
+    apply_network_to_config "$dest"
     chmod 600 "$dest" 2>/dev/null || true
     return 0
   fi
   # 复制完整分区中文模板，并统一 CPA 默认 host
   cp -f "$example" "$dest"
-  # 确保 CPA_MANAGEMENT_BASE / KEY 存在
   if ! grep -qE '^CPA_MANAGEMENT_BASE=' "$dest" 2>/dev/null; then
     printf '\nCPA_MANAGEMENT_BASE=http://127.0.0.1:8317/v0/management\n' >>"$dest"
   else
-    # localhost → 127.0.0.1（与文档一致）
     sed -i.bak 's#^CPA_MANAGEMENT_BASE=http://localhost:#CPA_MANAGEMENT_BASE=http://127.0.0.1:#' "$dest" 2>/dev/null || \
       sed -i '' 's#^CPA_MANAGEMENT_BASE=http://localhost:#CPA_MANAGEMENT_BASE=http://127.0.0.1:#' "$dest" 2>/dev/null || true
     rm -f "${dest}.bak" 2>/dev/null || true
   fi
-  if ! grep -qE '^CPA_MANAGEMENT_KEY=' "$dest" 2>/dev/null; then
-    # 模板里已有 KEY= 行
-    if ! grep -q 'CPA_MANAGEMENT_KEY=' "$dest" 2>/dev/null; then
-      printf 'CPA_MANAGEMENT_KEY=\n' >>"$dest"
-    fi
+  if ! grep -q 'CPA_MANAGEMENT_KEY=' "$dest" 2>/dev/null; then
+    printf 'CPA_MANAGEMENT_KEY=\n' >>"$dest"
   fi
+  apply_network_to_config "$dest"
   chmod 600 "$dest" 2>/dev/null || true
 }
 
@@ -454,6 +659,11 @@ print_done() {
   echo "  配置:     ${GROK_HOME_OPT}/config.env"
   echo "  示例:     ${GROK_HOME_OPT}/config.env.example"
   echo "  环境:     ${env_hint}"
+  case "$NET_MODE" in
+    warp)  echo "  网络:     WARP 清障 (http://127.0.0.1:40080)" ;;
+    proxy) echo "  网络:     本机代理 http://127.0.0.1:${LOCAL_PROXY_PORT}" ;;
+    none)  echo "  网络:     直连（无代理）" ;;
+  esac
   if [ -n "${SUDO_USER:-}" ] && [ "$SUDO_USER" != "root" ]; then
     echo
     echo "  注意: 请用用户 ${SUDO_USER} 运行（不要长期 root）："
@@ -475,7 +685,11 @@ print_done() {
     echo "提示: 命令名为 ${COMMAND_NAME}（不是 grok）。"
   fi
   echo "硬件提示: 清障栈+1 浏览器约需 2GB+ RAM；1GB 机器务必 --thread 1 且保证 swap。"
-  echo "clearance: cd ${INSTALL_DIR}/clearance && docker compose up -d && docker compose ps"
+  if [ "$NET_MODE" = "warp" ]; then
+    echo "clearance: cd ${INSTALL_DIR}/clearance && docker compose up -d && docker compose ps"
+  elif [ "$NET_MODE" = "proxy" ]; then
+    echo "请确认本机 HTTP 代理已监听 127.0.0.1:${LOCAL_PROXY_PORT}"
+  fi
   echo
   if [ -x "${BIN_DIR}/${COMMAND_NAME}" ]; then
     "${BIN_DIR}/${COMMAND_NAME}" help 2>/dev/null || true
@@ -507,6 +721,8 @@ install_linux() {
           SKIP_GO_INSTALL="$SKIP_GO_INSTALL" \
           START_CLEARANCE="$START_CLEARANCE" \
           NONINTERACTIVE="$NONINTERACTIVE" \
+          NET_MODE="$NET_MODE" \
+          LOCAL_PROXY_PORT="$LOCAL_PROXY_PORT" \
           bash "$self" \
           --command "$COMMAND_NAME" \
           --install-dir "$INSTALL_DIR" \
@@ -517,11 +733,13 @@ install_linux() {
           --repo "$REPO_URL" \
           --branch "$BRANCH" \
           --go-version "$GO_VERSION" \
+          $([ "$NET_MODE" = "warp" ] && echo --with-warp) \
+          $([ "$NET_MODE" = "none" ] && echo --no-warp) \
+          $([ "$NET_MODE" = "proxy" ] && [ -n "$LOCAL_PROXY_PORT" ] && echo --proxy-port "$LOCAL_PROXY_PORT") \
           $([ "$SKIP_DOCKER" = 1 ] && echo --skip-docker) \
-          $([ "$SKIP_CLEARANCE" = 1 ] && echo --skip-clearance) \
           $([ "$SKIP_BROWSER" = 1 ] && echo --skip-browser) \
           $([ "$SKIP_GO_INSTALL" = 1 ] && echo --skip-go) \
-          $([ "$START_CLEARANCE" = 0 ] && echo --no-start-clearance) \
+          $([ "$START_CLEARANCE" = 0 ] && [ "$NET_MODE" = "warp" ] && echo --no-start-clearance) \
           $([ "$NONINTERACTIVE" = 1 ] && echo --yes)
       fi
       die "请使用: curl -fsSL .../install.sh | sudo bash"
@@ -570,6 +788,11 @@ install_linux() {
   echo "  Python venv:$VENV_DIR"
   echo "  仓库:       $REPO_URL ($BRANCH)"
   echo "  运行用户:   ${SUDO_USER:-root}"
+  case "$NET_MODE" in
+    warp)  echo "  网络出口:   WARP 清障栈" ;;
+    proxy) echo "  网络出口:   本机代理 :${LOCAL_PROXY_PORT}" ;;
+    none)  echo "  网络出口:   直连" ;;
+  esac
   echo "=============================================="
   echo
 
