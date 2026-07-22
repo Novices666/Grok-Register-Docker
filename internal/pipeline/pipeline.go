@@ -70,9 +70,10 @@ type Engine struct {
 	fail     atomic.Int64
 
 	start   time.Time
-	wgReg   sync.WaitGroup // S/P/C
-	wgOAuth sync.WaitGroup
-	wgAux   sync.WaitGroup // status ticker etc
+	wgReg    sync.WaitGroup // S/P/C
+	wgOAuth  sync.WaitGroup
+	wgAux    sync.WaitGroup // status ticker etc
+	wgUpload sync.WaitGroup // async CPA management uploads
 }
 
 // remainingCapacity = target - done - reserved (how many new accounts may start).
@@ -325,9 +326,31 @@ shutdown:
 	// 1) stop S/P/C producers (ctx canceled)
 	// 2) wait register workers so no more sends to oauthCh
 	// 3) close oauthCh so OAuth workers exit range
+	// 4) wait CPA management uploads (async; used to be killed on exit)
 	waitGroupTimeout(&e.wgReg, 15*time.Second, log, "register workers")
 	close(e.oauthCh)
 	waitGroupTimeout(&e.wgOAuth, 30*time.Second, log, "oauth workers")
+	uploadWait := 90 * time.Second
+	if cfg.CPAUploadEnabled {
+		// timeout * (retries+1) + verify + margin
+		to := cfg.CPAUploadTimeoutSec
+		if to <= 0 {
+			to = 30
+		}
+		retries := cfg.CPAUploadRetries
+		if retries < 0 {
+			retries = 0
+		}
+		uploadWait = time.Duration(to*(retries+1)+30) * time.Second
+		if uploadWait < 60*time.Second {
+			uploadWait = 60 * time.Second
+		}
+		if uploadWait > 5*time.Minute {
+			uploadWait = 5 * time.Minute
+		}
+		log.Infof("[cpa] 等待 Management 上传完成（最多 %s）…", uploadWait)
+	}
+	waitGroupTimeout(&e.wgUpload, uploadWait, log, "cpa upload")
 	waitGroupTimeout(&e.wgAux, 3*time.Second, log, "aux")
 
 	_ = st.Set(func(s *state.Snapshot) {
@@ -674,14 +697,37 @@ func (e *Engine) oauthWorker(ctx context.Context, id int) {
 		if e.uploader != nil && e.uploader.Enabled() {
 			up := e.uploader
 			docCopy := doc
+			e.wgUpload.Add(1)
 			go func() {
+				defer e.wgUpload.Done()
 				defer func() { _ = recover() }()
-				_ = up.UploadDocument(docCopy)
+				log.Infof("[cpa] 开始上传 %s …", docCopy.Email)
+				res := up.UploadDocument(docCopy)
+				if res.Err != nil {
+					log.Warnf("[cpa] 上传失败 %s: %v", docCopy.Email, res.Err)
+				} else if !res.OK {
+					log.Warnf("[cpa] 上传失败 %s status=%d body=%s", docCopy.Email, res.Status, truncateRunes(res.Body, 180))
+				} else if res.Verified {
+					log.OKf("[cpa] 已入库 %s → %s", docCopy.Email, res.Name)
+				} else {
+					log.OKf("[cpa] 已上传 %s → %s（列表校验未命中，可能仍成功）", docCopy.Email, res.Name)
+				}
 			}()
 		}
 		log.OKf("CPA 就绪 #%d/%d %s -> %s", d, e.opt.Target, job.Email, filepath.Base(path))
 		e.refreshState()
 	}
+}
+
+func truncateRunes(s string, n int) string {
+	if n <= 0 || s == "" {
+		return s
+	}
+	r := []rune(s)
+	if len(r) <= n {
+		return s
+	}
+	return string(r[:n]) + "…"
 }
 
 func deriveWorkers(cfg config.Config) (s, p, c, oa, phys int) {
