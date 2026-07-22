@@ -49,8 +49,10 @@ grok upload                # 手动上传 CPA JSON 到 Management API
    - **Y（默认）**：起 Docker 清障，`REGISTER_PROXY=http://127.0.0.1:40080`  
    - **N**：不装清障；再问 **本机 HTTP 代理端口**  
      - 输入如 `7890` → `REGISTER_PROXY=http://127.0.0.1:7890`，`CLEARANCE_ENABLED=0`  
-     - **直接回车** → 直连（无代理，适合能访问 x.ai 的境外 VPS）
-
+     - **直接回车** → 直连（无代理，适合能访问 x.ai 的境外 VPS）  
+3. **（WARP 时）运行结束后是否自动关闭清障容器？** `[Y]`  
+   - **Y（默认）**：`CLEARANCE_AUTO_STOP=1`，结束/中断后 `docker compose stop`  
+   - **N**：容器常开；每次 `grok start` 仍会检测并自动拉起未运行的栈
 无 TTY 的 `curl|sudo bash` 可能无法提问，此时：
 
 ```bash

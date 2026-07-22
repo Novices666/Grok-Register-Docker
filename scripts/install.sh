@@ -57,6 +57,10 @@ NONINTERACTIVE="${NONINTERACTIVE:-0}"
 NET_MODE="${NET_MODE:-}"
 # 本机 HTTP 代理端口（NET_MODE=proxy 时用）；空=直连
 LOCAL_PROXY_PORT="${LOCAL_PROXY_PORT:-}"
+# 运行结束是否自动 docker compose stop 清障（默认 1）
+CLEARANCE_AUTO_STOP="${CLEARANCE_AUTO_STOP:-1}"
+SET_AUTO_STOP=0
+[ -n "${CLEARANCE_AUTO_STOP_SET:-}" ] && SET_AUTO_STOP=1
 
 # 环境变量是否在进脚本前已显式设置（显式则不再交互问该项）
 _ENV_COMMAND_NAME="${COMMAND_NAME-}"
@@ -138,6 +142,8 @@ Grok-Register 一键部署
   --with-warp           使用 WARP 清障栈（默认）
   --no-warp             不使用清障；可配合 --proxy-port
   --proxy-port PORT     本机 HTTP 代理端口（隐含 --no-warp），如 7890
+  --auto-stop           运行结束自动关闭清障容器（默认）
+  --no-auto-stop        运行结束保留清障容器
   --skip-docker         不安装/不检查 Docker
   --skip-clearance      同 --no-warp 且不起 compose
   --skip-browser        不装 Playwright/CloakBrowser
@@ -185,6 +191,8 @@ while [ $# -gt 0 ]; do
       START_CLEARANCE=0
       shift 2
       ;;
+    --auto-stop) CLEARANCE_AUTO_STOP=1; SET_AUTO_STOP=1; shift ;;
+    --no-auto-stop) CLEARANCE_AUTO_STOP=0; SET_AUTO_STOP=1; shift ;;
     --skip-docker) SKIP_DOCKER=1; shift ;;
     --skip-clearance) SKIP_CLEARANCE=1; START_CLEARANCE=0; NET_MODE=none; SET_NET_MODE=1; shift ;;
     --skip-browser) SKIP_BROWSER=1; shift ;;
@@ -291,11 +299,13 @@ prompt_network_exit() {
   # 交互：是否 WARP 清障；N 则问代理端口
   if [ "$SET_NET_MODE" = 1 ]; then
     apply_net_mode_flags
+    prompt_auto_stop
     return 0
   fi
   if [ "$NONINTERACTIVE" = 1 ] || [ ! -r /dev/tty ] || [ ! -w /dev/tty ]; then
     NET_MODE=warp
     apply_net_mode_flags
+    CLEARANCE_AUTO_STOP="${CLEARANCE_AUTO_STOP:-1}"
     return 0
   fi
 
@@ -340,6 +350,38 @@ prompt_network_exit() {
       ;;
   esac
   apply_net_mode_flags
+  prompt_auto_stop
+}
+
+prompt_auto_stop() {
+  # 是否在运行结束/中断后自动关闭清障容器
+  if [ "$SET_AUTO_STOP" = 1 ]; then
+    return 0
+  fi
+  # 非 WARP / 无清障时仍写入开关（默认开），便于日后改 CLEARANCE_ENABLED
+  if [ "$NONINTERACTIVE" = 1 ] || [ ! -r /dev/tty ] || [ ! -w /dev/tty ]; then
+    CLEARANCE_AUTO_STOP="${CLEARANCE_AUTO_STOP:-1}"
+    return 0
+  fi
+  if [ "$NET_MODE" != "warp" ]; then
+    # 未用清障栈时默认仍写 1，无实质影响
+    CLEARANCE_AUTO_STOP=1
+    return 0
+  fi
+  echo >/dev/tty
+  echo "----------------------------------------------" >/dev/tty
+  echo " 清障容器生命周期" >/dev/tty
+  echo "----------------------------------------------" >/dev/tty
+  echo "  Y — 注册结束/中断后自动 docker compose stop，省内存【默认】" >/dev/tty
+  echo "  N — 保持容器常开（下次 start 更快，持续占 RAM）" >/dev/tty
+  echo "  （每次 grok start 仍会检测并自动拉起未运行的清障栈）" >/dev/tty
+  echo >/dev/tty
+  local yn="Y"
+  prompt_value yn "运行结束后自动关闭清障容器" "Y"
+  case "$(printf '%s' "$yn" | tr '[:upper:]' '[:lower:]')" in
+    n|no|否|0) CLEARANCE_AUTO_STOP=0 ;;
+    *) CLEARANCE_AUTO_STOP=1 ;;
+  esac
 }
 
 maybe_prompt_paths() {
@@ -349,6 +391,7 @@ maybe_prompt_paths() {
       NET_MODE=warp
     fi
     apply_net_mode_flags
+    CLEARANCE_AUTO_STOP="${CLEARANCE_AUTO_STOP:-1}"
     return 0
   fi
   if [ ! -r /dev/tty ] || [ ! -w /dev/tty ]; then
@@ -358,6 +401,7 @@ maybe_prompt_paths() {
       NET_MODE=warp
     fi
     apply_net_mode_flags
+    CLEARANCE_AUTO_STOP="${CLEARANCE_AUTO_STOP:-1}"
     return 0
   fi
 
@@ -397,6 +441,11 @@ maybe_prompt_paths() {
   case "$NET_MODE" in
     warp)
       echo "  网络:   WARP 清障栈 (REGISTER_PROXY=http://127.0.0.1:40080)" >/dev/tty
+      if [ "$CLEARANCE_AUTO_STOP" = 1 ]; then
+        echo "  容器:   运行结束自动 stop 清障栈" >/dev/tty
+      else
+        echo "  容器:   运行结束保留清障栈" >/dev/tty
+      fi
       ;;
     proxy)
       echo "  网络:   本机代理 http://127.0.0.1:${LOCAL_PROXY_PORT}（无清障）" >/dev/tty
@@ -470,6 +519,15 @@ apply_network_to_config() {
       ;;
   esac
   env_set_key "$dest" "NO_PROXY" "127.0.0.1,localhost"
+  # 默认开启：结束自动 stop；安装交互可改
+  if [ "${CLEARANCE_AUTO_STOP:-1}" = 1 ]; then
+    env_set_key "$dest" "CLEARANCE_AUTO_STOP" "1"
+  else
+    env_set_key "$dest" "CLEARANCE_AUTO_STOP" "0"
+  fi
+  if [ -n "${INSTALL_DIR:-}" ] && [ -d "$INSTALL_DIR/clearance" ]; then
+    env_set_key "$dest" "CLEARANCE_COMPOSE_DIR" "$INSTALL_DIR/clearance"
+  fi
 }
 
 seed_config_from_example() {
@@ -723,6 +781,7 @@ install_linux() {
           NONINTERACTIVE="$NONINTERACTIVE" \
           NET_MODE="$NET_MODE" \
           LOCAL_PROXY_PORT="$LOCAL_PROXY_PORT" \
+          CLEARANCE_AUTO_STOP="$CLEARANCE_AUTO_STOP" \
           bash "$self" \
           --command "$COMMAND_NAME" \
           --install-dir "$INSTALL_DIR" \
@@ -736,6 +795,8 @@ install_linux() {
           $([ "$NET_MODE" = "warp" ] && echo --with-warp) \
           $([ "$NET_MODE" = "none" ] && echo --no-warp) \
           $([ "$NET_MODE" = "proxy" ] && [ -n "$LOCAL_PROXY_PORT" ] && echo --proxy-port "$LOCAL_PROXY_PORT") \
+          $([ "$CLEARANCE_AUTO_STOP" = 1 ] && echo --auto-stop) \
+          $([ "$CLEARANCE_AUTO_STOP" = 0 ] && echo --no-auto-stop) \
           $([ "$SKIP_DOCKER" = 1 ] && echo --skip-docker) \
           $([ "$SKIP_BROWSER" = 1 ] && echo --skip-browser) \
           $([ "$SKIP_GO_INSTALL" = 1 ] && echo --skip-go) \

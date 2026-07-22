@@ -179,10 +179,27 @@ func (e *Engine) run(ctx context.Context) error {
 		s.Error = ""
 	})
 
-	// Clearance
+	// Clearance stack: ensure docker compose up, optional stop on exit
 	if cfg.ClearanceEnabled {
+		msg, err := clearance.EnsureStack(cfg.ClearanceComposeDir, 40080, 8191)
+		if err != nil {
+			log.Warnf("[clearance] 自动拉起失败: %v — 将继续尝试预热", err)
+		} else {
+			log.Infof("[clearance] %s", msg)
+		}
+		if cfg.ClearanceAutoStop {
+			log.Info("[clearance] CLEARANCE_AUTO_STOP=1：运行结束/中断后将停止清障容器")
+			defer func() {
+				sm, serr := clearance.StopStack(cfg.ClearanceComposeDir)
+				if serr != nil {
+					log.Warnf("[clearance] 自动停止失败: %v", serr)
+				} else {
+					log.Infof("[clearance] %s", sm)
+				}
+			}()
+		}
 		e.cm = clearance.NewManager(cfg.FlareSolverrURL, cfg.ClearanceProxy, cfg.ClearanceURLs)
-		msg, err := e.cm.Prewarm()
+		msg, err = e.cm.Prewarm()
 		if err != nil {
 			log.Warnf("clearance: %v (%s)", err, msg)
 		} else {

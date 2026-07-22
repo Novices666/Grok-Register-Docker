@@ -32,10 +32,15 @@ type Config struct {
 	TestmailDomain    string // default inbox.testmail.app
 
 	ClearanceEnabled bool
-	RegisterProxy    string
-	FlareSolverrURL  string
-	ClearanceProxy   string
-	ClearanceURLs    string
+	// ClearanceAutoStop: after run ends or is interrupted, docker compose stop clearance stack.
+	// Start always tries EnsureStack when ClearanceEnabled (auto-start is not optional).
+	ClearanceAutoStop bool
+	// ClearanceComposeDir optional override (else GROK_CLEARANCE_DIR / discover).
+	ClearanceComposeDir string
+	RegisterProxy       string
+	FlareSolverrURL     string
+	ClearanceProxy      string
+	ClearanceURLs       string
 
 	// Target / TurnstileWorkers are RUNTIME-ONLY (CLI or interactive start).
 	// Not loaded from or saved to config.env.
@@ -76,6 +81,7 @@ func Defaults() Config {
 		EmailAPI:              "http://127.0.0.1:8080",
 		TestmailDomain:        "inbox.testmail.app",
 		ClearanceEnabled:      true,
+		ClearanceAutoStop:     true,
 		RegisterProxy:         "http://127.0.0.1:40080",
 		FlareSolverrURL:       "http://127.0.0.1:8191",
 		ClearanceProxy:        "http://privoxy:8118",
@@ -188,6 +194,10 @@ func Save(path string, cfg Config) error {
 		b.WriteString(fmt.Sprintf("TESTMAIL_DOMAIN=%s\n", cfg.TestmailDomain))
 	}
 	b.WriteString(fmt.Sprintf("CLEARANCE_ENABLED=%s\n", bool01(cfg.ClearanceEnabled)))
+	b.WriteString(fmt.Sprintf("CLEARANCE_AUTO_STOP=%s\n", bool01(cfg.ClearanceAutoStop)))
+	if cfg.ClearanceComposeDir != "" {
+		b.WriteString(fmt.Sprintf("CLEARANCE_COMPOSE_DIR=%s\n", cfg.ClearanceComposeDir))
+	}
 	b.WriteString(fmt.Sprintf("REGISTER_PROXY=%s\n", cfg.RegisterProxy))
 	b.WriteString(fmt.Sprintf("FLARESOLVERR_URL=%s\n", cfg.FlareSolverrURL))
 	b.WriteString(fmt.Sprintf("CLEARANCE_PROXY=%s\n", cfg.ClearanceProxy))
@@ -360,6 +370,12 @@ func applyMap(cfg *Config, env map[string]string) {
 	}
 	if v, ok := env["CLEARANCE_ENABLED"]; ok {
 		cfg.ClearanceEnabled = truthy(v)
+	}
+	if v, ok := env["CLEARANCE_AUTO_STOP"]; ok {
+		cfg.ClearanceAutoStop = truthy(v)
+	}
+	if v, ok := env["CLEARANCE_COMPOSE_DIR"]; ok {
+		cfg.ClearanceComposeDir = strings.TrimSpace(v)
 	}
 	if v, ok := env["REGISTER_PROXY"]; ok {
 		cfg.RegisterProxy = v
