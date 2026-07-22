@@ -63,15 +63,67 @@ type Engine struct {
 	oauthCh  chan SSOJob
 	uploader *cpa.Uploader
 
-	done atomic.Int64
-	ssoN atomic.Int64
-	oaN  atomic.Int64
-	fail atomic.Int64
+	done     atomic.Int64 // CPA successes (counts toward -t)
+	reserved atomic.Int64 // in-flight accounts (email→register→oauth→probe)
+	ssoN     atomic.Int64
+	oaN      atomic.Int64
+	fail     atomic.Int64
 
 	start   time.Time
 	wgReg   sync.WaitGroup // S/P/C
 	wgOAuth sync.WaitGroup
 	wgAux   sync.WaitGroup // status ticker etc
+}
+
+// remainingCapacity = target - done - reserved (how many new accounts may start).
+func (e *Engine) remainingCapacity() int {
+	n := e.opt.Target - int(e.done.Load()) - int(e.reserved.Load())
+	if n < 0 {
+		return 0
+	}
+	return n
+}
+
+// tryReserve claims one pipeline seat for a new account attempt.
+func (e *Engine) tryReserve() bool {
+	for {
+		d := e.done.Load()
+		r := e.reserved.Load()
+		if d+r >= int64(e.opt.Target) {
+			return false
+		}
+		if e.reserved.CompareAndSwap(r, r+1) {
+			return true
+		}
+	}
+}
+
+func (e *Engine) releaseReserve() {
+	for {
+		r := e.reserved.Load()
+		if r <= 0 {
+			return
+		}
+		if e.reserved.CompareAndSwap(r, r-1) {
+			return
+		}
+	}
+}
+
+// tryComplete moves a reserved seat into done. Returns (newDone, ok).
+// ok=false means target already met (caller should discard extra success).
+func (e *Engine) tryComplete() (int64, bool) {
+	for {
+		d := e.done.Load()
+		if d >= int64(e.opt.Target) {
+			e.releaseReserve()
+			return d, false
+		}
+		if e.done.CompareAndSwap(d, d+1) {
+			e.releaseReserve()
+			return d + 1, true
+		}
+	}
 }
 
 func Run(ctx context.Context, opt Options) error {
@@ -308,7 +360,7 @@ func (e *Engine) refreshState() {
 		s.FailCount = int(e.fail.Load())
 		s.RatePerMin = rate
 		if s.Phase == state.PhaseRegister || s.Phase == "" {
-			s.PhaseDetail = fmt.Sprintf("注册中 T=%d Q=%d done=%d/%d", t, q, e.done.Load(), e.opt.Target)
+			s.PhaseDetail = fmt.Sprintf("注册中 T=%d Q=%d done=%d/%d inflight=%d", t, q, e.done.Load(), e.opt.Target, e.reserved.Load())
 		}
 	})
 }
@@ -331,8 +383,33 @@ func (e *Engine) sWorker(ctx context.Context, id int, scfg protocol.SignupConfig
 	log := e.opt.Log
 	pageURL := protocol.SiteURL + "/sign-up"
 	for {
-		if int(e.done.Load()) >= e.opt.Target {
+		if e.remainingCapacity() <= 0 && int(e.done.Load()) >= e.opt.Target {
 			return
+		}
+		// Don't mint far ahead of what we still need.
+		if e.remainingCapacity() <= 0 {
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(500 * time.Millisecond):
+			}
+			if int(e.done.Load()) >= e.opt.Target {
+				return
+			}
+			continue
+		}
+		tDepth, _ := e.inv.Depths()
+		need := e.remainingCapacity()
+		if need < 1 {
+			need = 1
+		}
+		if tDepth >= need {
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(400 * time.Millisecond):
+			}
+			continue
 		}
 		select {
 		case <-ctx.Done():
@@ -372,14 +449,20 @@ func (e *Engine) pWorker(ctx context.Context, id int) {
 			return
 		default:
 		}
-		// Admission: don't flood tempmail when T is empty or we already have enough Q.
-		// remaining CPA slots ≈ target - done; keep at most min(4, remaining) Q ready.
-		remaining := e.opt.Target - int(e.done.Load())
-		if remaining <= 0 {
-			return
+		// Global seat: done + reserved <= target (not per-worker).
+		if e.remainingCapacity() <= 0 {
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(500 * time.Millisecond):
+			}
+			if int(e.done.Load()) >= e.opt.Target {
+				return
+			}
+			continue
 		}
 		_, qDepth := e.inv.Depths()
-		qCap := remaining
+		qCap := e.remainingCapacity()
 		if qCap > 4 {
 			qCap = 4
 		}
@@ -395,12 +478,24 @@ func (e *Engine) pWorker(ctx context.Context, id int) {
 			continue
 		}
 
+		// Reserve seat BEFORE creating email so multi-P cannot overshoot -t.
+		if !e.tryReserve() {
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(300 * time.Millisecond):
+			}
+			continue
+		}
+
 		if err := e.qPending.Acquire(ctx); err != nil {
+			e.releaseReserve()
 			return
 		}
 		h, err := e.mail.Create()
 		if err != nil {
 			e.qPending.Release()
+			e.releaseReserve()
 			log.Debugf("[P%d] create email: %v", id, err)
 			select {
 			case <-ctx.Done():
@@ -411,6 +506,7 @@ func (e *Engine) pWorker(ctx context.Context, id int) {
 		}
 		if err := e.xai.CreateEmailCode(h.Email); err != nil {
 			e.qPending.Release()
+			e.releaseReserve()
 			log.Debugf("[P%d] create code %s: %v", id, h.Email, err)
 			select {
 			case <-ctx.Done():
@@ -422,16 +518,19 @@ func (e *Engine) pWorker(ctx context.Context, id int) {
 		code, err := e.mail.PollCode(h, 90*time.Second)
 		if err != nil {
 			e.qPending.Release()
+			e.releaseReserve()
 			log.Debugf("[P%d] poll code: %v", id, err)
 			continue
 		}
 		item := QItem{Email: h.Email, Password: h.Password, Code: code, Handle: h}
 		if err := e.inv.PutQ(ctx, item, 2*time.Minute); err != nil {
 			e.qPending.Release()
+			e.releaseReserve()
 			return
 		}
 		e.qPending.Release()
-		log.Debugf("[P%d] Q ready %s", id, h.Email)
+		// seat stays reserved until signup fail / oauth fail / CPA success
+		log.Debugf("[P%d] Q ready %s (reserved=%d done=%d/%d)", id, h.Email, e.reserved.Load(), e.done.Load(), e.opt.Target)
 	}
 }
 
@@ -459,6 +558,7 @@ func (e *Engine) cWorker(ctx context.Context, id int, scfg protocol.SignupConfig
 			log.Warnf("verify fail %s: %v", q.Email, err)
 			pair.Release()
 			e.fail.Add(1)
+			e.releaseReserve()
 			continue
 		}
 		body := protocol.BuildSignupBody(q.Email, q.Password, q.Code, token)
@@ -474,6 +574,7 @@ func (e *Engine) cWorker(ctx context.Context, id int, scfg protocol.SignupConfig
 			}
 			log.Warnf("signup fail %s: err=%v sso=%v body=%q", q.Email, err, sso != "", preview)
 			e.fail.Add(1)
+			e.releaseReserve() // free seat for another attempt
 			continue
 		}
 
@@ -489,12 +590,13 @@ func (e *Engine) cWorker(ctx context.Context, id int, scfg protocol.SignupConfig
 		job := SSOJob{Email: q.Email, Password: q.Password, SSO: sso}
 		select {
 		case <-ctx.Done():
+			e.releaseReserve()
 			return
 		case e.oauthCh <- job:
 		default:
-			// queue full or closing — try once more with context
 			select {
 			case <-ctx.Done():
+				e.releaseReserve()
 				return
 			case e.oauthCh <- job:
 			}
@@ -511,7 +613,9 @@ func (e *Engine) oauthWorker(ctx context.Context, id int) {
 	}
 	var last time.Time
 	for job := range e.oauthCh {
+		// Soft-stop: still drain with seat accounting, but skip work past target.
 		if int(e.done.Load()) >= e.opt.Target {
+			e.releaseReserve()
 			continue
 		}
 		if !last.IsZero() {
@@ -531,9 +635,9 @@ func (e *Engine) oauthWorker(ctx context.Context, id int) {
 		log.Startf("OAuth %s", job.Email)
 		cred, err := e.oauth.Exchange(ctx, job.SSO)
 		if err != nil {
-			// browser fallback not implemented in v1 HTTP path — log and count fail
 			log.Warnf("OAuth fail %s: %v", job.Email, err)
 			e.fail.Add(1)
+			e.releaseReserve()
 			continue
 		}
 		e.oaN.Add(1)
@@ -548,16 +652,25 @@ func (e *Engine) oauthWorker(ctx context.Context, id int) {
 				path, _ := cpa.WriteAtomic(e.opt.Run.Discarded, doc, cpa.DefaultSecret())
 				_ = path
 				e.fail.Add(1)
+				e.releaseReserve()
 				continue
 			}
+		}
+		// Atomic complete: prevents multi-OAuth overshoot of -t.
+		d, ok := e.tryComplete()
+		if !ok {
+			// Target already filled by another worker — keep file in discarded.
+			path, _ := cpa.WriteAtomic(e.opt.Run.Discarded, doc, cpa.DefaultSecret())
+			log.Warnf("已达目标，额外号移入 discarded: %s (%s)", job.Email, filepath.Base(path))
+			continue
 		}
 		path, err := cpa.WriteAtomic(e.opt.Run.CPA, doc, cpa.DefaultSecret())
 		if err != nil {
 			log.Warnf("写 CPA 失败: %v", err)
+			// seat already converted to done; count as fail but don't re-open flood
 			e.fail.Add(1)
 			continue
 		}
-		// Auto-upload to CPA management (non-fatal).
 		if e.uploader != nil && e.uploader.Enabled() {
 			up := e.uploader
 			docCopy := doc
@@ -566,7 +679,6 @@ func (e *Engine) oauthWorker(ctx context.Context, id int) {
 				_ = up.UploadDocument(docCopy)
 			}()
 		}
-		d := e.done.Add(1)
 		log.OKf("CPA 就绪 #%d/%d %s -> %s", d, e.opt.Target, job.Email, filepath.Base(path))
 		e.refreshState()
 	}
