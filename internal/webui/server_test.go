@@ -76,6 +76,23 @@ func TestIndexExposesEveryEditableConfigKey(t *testing.T) {
 	}
 }
 
+func TestConfigEndpointExposesDefaultTarget(t *testing.T) {
+	dir := t.TempDir()
+	app := New(AppConfig{Home: dir, Username: "admin", Password: "secret", DefaultTarget: 37})
+	req := httptest.NewRequest(http.MethodGet, "/api/config", nil)
+	req.SetBasicAuth("admin", "secret")
+	res := httptest.NewRecorder()
+
+	app.Handler().ServeHTTP(res, req)
+
+	if res.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", res.Code, http.StatusOK)
+	}
+	if got := res.Body.String(); !strings.Contains(got, `"GROK_TARGET":"37"`) {
+		t.Fatalf("body = %s, want GROK_TARGET 37", got)
+	}
+}
+
 func TestAuthorizedLogEndpointReturnsLatestLog(t *testing.T) {
 	dir := t.TempDir()
 	logs := filepath.Join(dir, "logs")
@@ -168,5 +185,45 @@ func TestStartEndpointPassesTargetAndThread(t *testing.T) {
 	got := strings.TrimSpace(string(raw))
 	if got != "start -t 1 -j 2" {
 		t.Fatalf("args = %q, want %q", got, "start -t 1 -j 2")
+	}
+}
+
+func TestStartEndpointUsesConfiguredDefaultTarget(t *testing.T) {
+	dir := t.TempDir()
+	var fake string
+	if runtime.GOOS == "windows" {
+		fake = filepath.Join(dir, "fake-grok.bat")
+		if err := os.WriteFile(fake, []byte("@echo %* > \"%~dp0args.txt\"\r\n"), 0o700); err != nil {
+			t.Fatal(err)
+		}
+	} else {
+		fake = filepath.Join(dir, "fake-grok")
+		if err := os.WriteFile(fake, []byte("#!/bin/sh\nprintf '%s' \"$*\" > \"$(dirname \"$0\")/args.txt\"\n"), 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	app := New(AppConfig{
+		Home:          dir,
+		Username:      "admin",
+		Password:      "secret",
+		GrokBin:       fake,
+		DefaultTarget: 37,
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/api/start", strings.NewReader("thread=3"))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.SetBasicAuth("admin", "secret")
+	res := httptest.NewRecorder()
+	app.Handler().ServeHTTP(res, req)
+
+	if res.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d body=%s", res.Code, http.StatusOK, res.Body.String())
+	}
+	raw, err := os.ReadFile(filepath.Join(dir, "args.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.TrimSpace(string(raw)); got != "start -t 37 -j 3" {
+		t.Fatalf("args = %q, want %q", got, "start -t 37 -j 3")
 	}
 }

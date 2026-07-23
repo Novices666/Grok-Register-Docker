@@ -27,10 +27,11 @@ import (
 var templateFS embed.FS
 
 type AppConfig struct {
-	Home     string
-	Username string
-	Password string
-	GrokBin  string
+	Home          string
+	Username      string
+	Password      string
+	GrokBin       string
+	DefaultTarget int
 }
 
 type App struct {
@@ -95,6 +96,7 @@ var editableConfigKeys = []string{
 	"TURNSTILE_PROVIDER",
 	"TURNSTILE_MODE",
 	"LITE_SOLVER_URL",
+	"CHROME_PATH",
 	"PROTOCOL_HTTP",
 	"HTTP_POOL_SIZE",
 	"TEMPMAIL_LOL_RETRIES",
@@ -131,6 +133,9 @@ func New(cfg AppConfig) *App {
 	}
 	if cfg.GrokBin == "" {
 		cfg.GrokBin = "grok"
+	}
+	if cfg.DefaultTarget < 1 || cfg.DefaultTarget > 10000 {
+		cfg.DefaultTarget = 10
 	}
 	return &App{cfg: cfg}
 }
@@ -191,7 +196,7 @@ func (a *App) start(w http.ResponseWriter, r *http.Request) {
 	}
 	target := strings.TrimSpace(r.FormValue("target"))
 	if target == "" {
-		target = "10"
+		target = strconv.Itoa(a.cfg.DefaultTarget)
 	}
 	if n, err := strconv.Atoi(target); err != nil || n < 1 || n > 10000 {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "目标数量必须是 1 到 10000"})
@@ -279,7 +284,9 @@ func (a *App) runDetail(w http.ResponseWriter, r *http.Request) {
 func (a *App) config(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		writeJSON(w, http.StatusOK, a.readConfig())
+		cfg := a.readConfig()
+		cfg["GROK_TARGET"] = strconv.Itoa(a.cfg.DefaultTarget)
+		writeJSON(w, http.StatusOK, cfg)
 	case http.MethodPost:
 		var next map[string]string
 		if err := json.NewDecoder(r.Body).Decode(&next); err != nil {
@@ -817,6 +824,7 @@ func defaultWebConfig() map[string]string {
 		"TURNSTILE_PROVIDER":           "browser",
 		"TURNSTILE_MODE":               "offscreen",
 		"LITE_SOLVER_URL":              "http://127.0.0.1:5072",
+		"CHROME_PATH":                  "",
 		"PROTOCOL_HTTP":                "1",
 		"HTTP_POOL_SIZE":               "8",
 		"TEMPMAIL_LOL_RETRIES":         "30",

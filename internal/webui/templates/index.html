@@ -514,6 +514,7 @@
       { key: "CF_IMPERSONATE_FALLBACK", group: "clearance", label: "TLS 备用指纹", placeholder: "chrome_124,chrome_120" },
       { key: "TURNSTILE_PROVIDER", group: "engine", label: "Turnstile Provider", placeholder: "browser" },
       { key: "TURNSTILE_MODE", group: "engine", label: "Turnstile 模式", type: "select", options: [["offscreen", "offscreen"], ["headless", "headless"], ["auto", "auto"]] },
+      { key: "CHROME_PATH", group: "engine", label: "Chrome 路径", placeholder: "留空则自动探测", note: "原生部署可指定 Chrome/Chromium 可执行文件；Docker 中必须使用容器内路径。", wide: true },
       { key: "LITE_SOLVER_URL", group: "engine", label: "Lite Solver URL", type: "url" },
       { key: "PROTOCOL_HTTP", group: "engine", label: "协议 HTTP 客户端", type: "bool" },
       { key: "HTTP_POOL_SIZE", group: "engine", label: "HTTP 并发池", type: "number", min: "1", step: "1" },
@@ -697,6 +698,7 @@
     async function loadConfig() {
       try {
         const config = await api("/api/config");
+        $("targetInput").value = config.GROK_TARGET || "10";
         state.config = Object.fromEntries(configKeys.map((key) => [key, config[key] ?? ""]));
         state.savedConfig = { ...state.config };
         setFormConfig(state.config);

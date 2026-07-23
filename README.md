@@ -95,7 +95,7 @@ Web 控制台包含以下能力：
 | 邮箱配置 | 配置临时邮箱、testmail 或自建邮箱服务 |
 | CPA 上传 | 配置并检查 Management API |
 | 历史记录 | 查看每次运行的 SSO、CPA、丢弃文件和日志 |
-| 下载 | 按全部、SSO、CPA、丢弃文件或日志下载 |
+| 下载 | 按全部、SSO、CPA、丢弃文件或日志下载；grok2api SSO 直接下载原始 `tokens.txt` |
 | 删除 | 仅隐藏历史记录，或同时删除记录和实际文件 |
 
 Web 服务使用 HTTP Basic Auth。它不提供 HTTPS，且接口可以启动任务、修改配置和下载凭据，因此不要直接暴露到公网。公网场景应置于带 HTTPS 和额外访问控制的反向代理之后。
@@ -183,6 +183,7 @@ Docker 启动配置来自根目录 `.env`。容器首次启动时会在 `./data/
 | `WEB_PORT` | `8090` | 宿主机监听端口 |
 | `WEB_USERNAME` | `admin` | Web 用户名 |
 | `WEB_PASSWORD` | 无 | 必填，Web 管理密码 |
+| `GROK_TARGET` | `10` | Web 控制台启动任务时的默认目标数量 |
 
 ### 邮箱
 
@@ -210,6 +211,7 @@ grok-register -> privoxy -> WARP
 | `FLARESOLVERR_URL` | `http://flaresolverr:8191` | FlareSolverr 服务地址 |
 | `TURNSTILE_PROVIDER` | `browser` | Turnstile 提供方式 |
 | `TURNSTILE_MODE` | `offscreen` | 浏览器运行模式 |
+| `CHROME_PATH` | 空 | 可选 Chrome/Chromium 可执行文件路径；Docker 中应使用容器内路径 |
 | `WARP_LICENSE_KEY` | 空 | 可选 WARP+ License |
 
 根目录一键 Docker 栈**仅向宿主机映射 Web 管理端口**（清障组件只在 compose 内网互通）：

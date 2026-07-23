@@ -156,7 +156,7 @@ func (e *Engine) run(ctx context.Context) error {
 	log := e.opt.Log
 	st := e.opt.Store
 
-	config.ApplyProxyEnv(cfg)
+	config.ApplyRuntimeEnv(cfg)
 
 	sWorkers, pWorkers, cWorkers, oauthWorkers, physCap := deriveWorkers(cfg)
 	e.phys = inventory.NewSemaphore(physCap)
