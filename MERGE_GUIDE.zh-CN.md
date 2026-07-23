@@ -9,9 +9,9 @@
 | 项目 | 内容 |
 |---|---|
 | 上游仓库 | `https://github.com/Charles-0509/Grok-Register` |
-| 上次已审查上游提交 | `7dc93c0` |
+| 上次已审查上游提交 | `3a46f26` |
 | 本仓库最初基于的上游提交 | `a8d87bd` |
-| 提交时间 | `2026-07-23 13:09:37 +0800` |
+| 提交时间 | `2026-07-23 13:36:40 +0800` |
 
 “上次已审查上游提交”表示已经检查到该提交，不表示审查范围内的所有提交都已采用。选择性移植时，必须在同步记录中单独列出实际采用和跳过的内容。
 
@@ -90,6 +90,18 @@ docker restart grok-register
 
 ## 同步记录
 
+
+### 2026-07-23 上游同步（xauth 依赖 3a46f26）
+
+| 项目 | 内容 |
+|---|---|
+| 同步分支 | `sync/upstream-20260723c` |
+| 审查范围 | `7dc93c0..3a46f26` |
+| 新的审查截止 | `3a46f26` |
+| 实际移植 | `3a46f26` install：精简 Debian 上与 `xvfb` 一并安装 `xauth`、`x11-xserver-utils`，避免 `xvfb-run` 报 `xauth command not found` 导致 offscreen Turnstile 失败 |
+| 明确跳过 | 无（上游仅此提交）；Dockerfile 未改（上游未动；容器走 Playwright headless 回退，本次不扩大范围） |
+| 兼容调整 | 仅 `scripts/install.sh` 依赖列表；Docker/WebUI/`OUTPUT_*` 不变 |
+| 验证结果 | `go test` config/oauth/pipeline/webui/cpa/inventory/protocol/logx/turnstile/cmd/web 通过；`GOOS=linux go build` grok/grok-web 通过；`docker compose --env-file .env.docker.example config --quiet` 通过。本机 Windows `go test ./...` 仍因 daemon flock/Setsid 失败（上游既有，Linux/容器目标不受影响） |
 
 ### 2026-07-23 上游同步（稳定默认 7dc93c0）
 
