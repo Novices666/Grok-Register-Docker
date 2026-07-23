@@ -10,7 +10,65 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
+
+func TestWriteConfigMergesPreservesCommentsAndUnknownKeys(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.env")
+	initial := "# keep this header\nEMAIL_MODE=tempmail\nCUSTOM_HAND_EDITED=1\n# note about workers\nOUTPUT_CPA_ENABLED=1\n"
+	if err := os.WriteFile(path, []byte(initial), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	app := New(AppConfig{Home: dir, Username: "admin", Password: "secret"})
+	body := strings.NewReader(`{"EMAIL_MODE":"testmail","OUTPUT_CPA_ENABLED":"0","OUTPUT_SSO_ENABLED":"1","OUTPUT_GROK2API_SSO_ENABLED":"1"}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/config", body)
+	req.Header.Set("Content-Type", "application/json")
+	req.SetBasicAuth("admin", "secret")
+	res := httptest.NewRecorder()
+	app.Handler().ServeHTTP(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", res.Code, res.Body.String())
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(raw)
+	for _, want := range []string{
+		"# keep this header",
+		"CUSTOM_HAND_EDITED=1",
+		"# note about workers",
+		"EMAIL_MODE=testmail",
+		"OUTPUT_CPA_ENABLED=0",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("merged config missing %q in:\n%s", want, text)
+		}
+	}
+}
+
+func TestRunSummarySSOCountUsesAccountsLines(t *testing.T) {
+	dir := t.TempDir()
+	runID := "20260723-120000"
+	ssoDir := filepath.Join(dir, "outputs", runID, "SSO")
+	if err := os.MkdirAll(ssoDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	// Two SSO files would have made old counter return 2; accounts has 3 lines.
+	accounts := "a@x.com:p:sso1\nb@x.com:p:sso2\nc@x.com:p:sso3\n"
+	if err := os.WriteFile(filepath.Join(ssoDir, "accounts.txt"), []byte(accounts), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(ssoDir, "auth-sessions.jsonl"), []byte("{}\n{}\n{}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	app := New(AppConfig{Home: dir, Username: "admin", Password: "secret"})
+	sum := app.summarizeRun(runID, filepath.Join(dir, "outputs", runID), time.Now())
+	if sum.SSOCount != 3 {
+		t.Fatalf("SSOCount = %d, want 3 (accounts lines)", sum.SSOCount)
+	}
+}
 
 func TestConfigRoundTripPreservesEditableValues(t *testing.T) {
 	dir := t.TempDir()

@@ -137,15 +137,17 @@ git diff <last-reviewed>..upstream/main -- cmd internal scripts config.env.examp
 
 ## 输出行为约束
 
-以下语义属于本仓库兼容接口：
+默认 `OUTPUT_*=1`，与上游完整流水线同构。语义冲突以上游为准。
 
 | 配置 | 必须保持的行为 |
 |---|---|
-| `OUTPUT_SSO_ENABLED=1` | 输出 `accounts.txt` 和 `auth-sessions.jsonl` |
-| `OUTPUT_GROK2API_SSO_ENABLED=1` | 在 SSO 输出开启时额外输出 `grok2api/tokens.txt` |
-| `OUTPUT_CPA_ENABLED=0` | 获得 SSO 后计成功，跳过 OAuth、CPA 探活和 CPA JSON |
-| `OUTPUT_CPA_ENABLED=1` | 执行 OAuth、CPA 探活并输出 CPA JSON |
+| `OUTPUT_SSO_ENABLED=1`（默认） | 输出 `accounts.txt` 和 `auth-sessions.jsonl` |
+| `OUTPUT_SSO_ENABLED=0` | 不写 SSO 文件；CPA=1 时仍执行 OAuth/CPA |
+| `OUTPUT_GROK2API_SSO_ENABLED=1`（默认） | 在 SSO 输出开启时额外输出 `grok2api/tokens.txt` |
+| `OUTPUT_CPA_ENABLED=0` | 本仓扩展：获得 SSO 后计完成，跳过 OAuth、探活和 CPA JSON |
+| `OUTPUT_CPA_ENABLED=1`（默认） | 与上游一致：OAuth、探活并输出 CPA JSON；目标按 CPA 就绪 |
 | `CPA_UPLOAD_ENABLED=1` | 仅在 CPA 输出开启时允许自动上传 |
+| `TURNSTILE_WORKERS` | 不得被 `config.Load` 当作 CLI 线程来源；仅 Web/Docker 启动 `-j` 便利默认 |
 
 修改流水线、配置或计数逻辑时，必须为相关组合保留或增加测试。
 

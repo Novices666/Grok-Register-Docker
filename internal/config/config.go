@@ -151,9 +151,10 @@ func Load(path string) (Config, error) {
 	return cfg, nil
 }
 
-// setEnvKey replaces an active KEY=... line in a .env body (first match).
+// UpsertEnvKey replaces an active KEY=... line in a .env body (first match).
 // If only a commented "# KEY=" exists, uncomment and set it. Otherwise append.
-func setEnvKey(content, key, value string) string {
+// Unknown lines (comments, other keys) are preserved — used by Web merge save.
+func UpsertEnvKey(content, key, value string) string {
 	prefix := key + "="
 	commented := "# " + prefix
 	lines := strings.Split(content, "\n")
@@ -183,6 +184,11 @@ func setEnvKey(content, key, value string) string {
 		lines = append(lines, prefix+value)
 	}
 	return strings.Join(lines, "\n")
+}
+
+// setEnvKey is the historical name used inside this package.
+func setEnvKey(content, key, value string) string {
+	return UpsertEnvKey(content, key, value)
 }
 
 // SeedFromExample writes the sectioned Chinese template (embedded example.env)

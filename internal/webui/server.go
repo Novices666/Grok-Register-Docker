@@ -19,6 +19,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/grok-free-register/grok-reg/internal/config"
 	"github.com/grok-free-register/grok-reg/internal/cpa"
 	"github.com/grok-free-register/grok-reg/internal/state"
 )
@@ -574,8 +575,11 @@ func (a *App) summarizeRun(id, dir string, mod time.Time) runSummary {
 	}
 	return runSummary{
 		ID:             id,
-		SSOCount:       countRunFiles(filepath.Join(dir, "SSO"), true, ".json", ".txt", ".jsonl"),
+		// SSO: account lines in accounts.txt (not SSO-dir file count).
+		SSOCount:       countTokenLines(filepath.Join(dir, "SSO", "accounts.txt")),
+		// grok2api: non-empty lines (may include duplicate tokens).
 		Grok2APISSO:    countTokenLines(filepath.Join(dir, "grok2api", "tokens.txt")),
+		// CPA: on-disk JSON files (same name overwrites → unique sessions).
 		CPACount:       countRunFiles(filepath.Join(dir, "CPA"), false, ".json"),
 		Discarded:      countRunFiles(filepath.Join(dir, "discarded"), false, ".json"),
 		TotalSize:      dirSize(dir),
@@ -788,19 +792,35 @@ func (a *App) readConfig() map[string]string {
 }
 
 func (a *App) writeConfig(cfg map[string]string) error {
-	var b strings.Builder
-	b.WriteString("# grok-reg config written by web console\n")
-	for _, key := range editableConfigKeys {
-		b.WriteString(key)
-		b.WriteString("=")
-		b.WriteString(cfg[key])
-		b.WriteString("\n")
-	}
 	path := filepath.Join(a.cfg.Home, "config.env")
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return err
 	}
-	return os.WriteFile(path, []byte(b.String()), 0o600)
+	// Merge into existing file so comments, section headers, and unknown keys survive.
+	// Aligns with upstream "hand-edit config.env" workflow; Web only upserts editable keys.
+	content := ""
+	if data, err := os.ReadFile(path); err == nil {
+		content = string(data)
+	}
+	if strings.TrimSpace(content) == "" {
+		var b strings.Builder
+		b.WriteString("# grok-reg config written by web console\n")
+		b.WriteString("# TURNSTILE_WORKERS is Web/Docker start default (-j) only; CLI ignores it (upstream).\n")
+		for _, key := range editableConfigKeys {
+			b.WriteString(key)
+			b.WriteString("=")
+			b.WriteString(cfg[key])
+			b.WriteString("\n")
+		}
+		return os.WriteFile(path, []byte(b.String()), 0o600)
+	}
+	for _, key := range editableConfigKeys {
+		content = config.UpsertEnvKey(content, key, cfg[key])
+	}
+	if !strings.HasSuffix(content, "\n") {
+		content += "\n"
+	}
+	return os.WriteFile(path, []byte(content), 0o600)
 }
 
 func defaultWebConfig() map[string]string {

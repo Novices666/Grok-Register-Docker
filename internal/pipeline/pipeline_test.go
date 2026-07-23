@@ -24,6 +24,23 @@ func TestShouldRunCPAFlowFollowsCPAOutput(t *testing.T) {
 	}
 }
 
+func TestUploadRequiresCPAOutputAndUploadFlag(t *testing.T) {
+	cfg := config.Defaults()
+	cfg.CPAUploadEnabled = true
+	cfg.OutputCPAEnabled = true
+	if !shouldRunCPAFlow(cfg) || !(shouldRunCPAFlow(cfg) && cfg.CPAUploadEnabled) {
+		t.Fatal("upload path should be armed when both CPA output and upload are on")
+	}
+	cfg.OutputCPAEnabled = false
+	if shouldRunCPAFlow(cfg) {
+		t.Fatal("CPA flow must stop when OUTPUT_CPA_ENABLED=0")
+	}
+	// Upload gate mirrors pipeline: shouldRunCPAFlow && CPAUploadEnabled
+	if shouldRunCPAFlow(cfg) && cfg.CPAUploadEnabled {
+		t.Fatal("upload must not run when CPA output is off")
+	}
+}
+
 func TestTurnstileMintNeedAllowsTokenForReservedAccount(t *testing.T) {
 	if got := turnstileMintNeed(1, 1, 0, 0); got != 1 {
 		t.Fatalf("turnstileMintNeed(target=1 reserved=1 done=0 tDepth=0) = %d, want 1", got)
