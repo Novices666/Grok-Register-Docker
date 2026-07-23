@@ -15,7 +15,7 @@ import (
 func TestConfigRoundTripPreservesEditableValues(t *testing.T) {
 	dir := t.TempDir()
 	app := New(AppConfig{Home: dir, Username: "admin", Password: "secret"})
-	body := strings.NewReader(`{"CPA_UPLOAD_ENABLED":"1","CPA_MANAGEMENT_BASE":"http://host.docker.internal:8317/v0/management","CPA_MANAGEMENT_KEY":"key-123","CPA_UPLOAD_TIMEOUT_SEC":"25","CPA_UPLOAD_RETRIES":"4","CPA_UPLOAD_NAME_TEMPLATE":"{email}.json","CPA_UPLOAD_VERIFY":"0","CPA_UPLOAD_MODE":"json","EMAIL_MODE":"testmail","EMAIL_DOMAIN":"example.com","EMAIL_API":"http://mail:8080","TESTMAIL_API_KEY":"tm-key","TESTMAIL_NAMESPACE":"tm-ns","TESTMAIL_DOMAIN":"inbox.testmail.app","CLEARANCE_ENABLED":"1","CLEARANCE_MODE":"auto","CLEARANCE_AUTO_STOP":"0","CLEARANCE_COMPOSE_DIR":"C:/clearance","CF_IMPERSONATE":"chrome_131","CF_IMPERSONATE_FALLBACK":"chrome_124,chrome_120","REGISTER_PROXY":"http://register-proxy:8118","FLARESOLVERR_URL":"http://flaresolverr:8191","CLEARANCE_PROXY":"http://clearance-proxy:8118","CLEARANCE_URLS":"https://accounts.x.ai,https://x.ai","TURNSTILE_PROVIDER":"browser","TURNSTILE_MODE":"offscreen","LITE_SOLVER_URL":"http://solver:5072","PROTOCOL_HTTP":"0","OUTPUT_SSO_ENABLED":"0","OUTPUT_GROK2API_SSO_ENABLED":"0","OUTPUT_CPA_ENABLED":"0","HTTP_POOL_SIZE":"12","PHYSICAL_CAP":"2","TURNSTILE_WORKERS":"3","TEMPMAIL_LOL_RETRIES":"42","TEMPMAIL_LOL_MIN_INTERVAL_MS":"2100","OAUTH_MIN_INTERVAL_SEC":"5","OAUTH_RETRY_SEC":"45","OAUTH_WORKERS":"1","PROBE_ENABLED":"0","PROBE_WARMUP_SEC":"2.5","HTTPS_PROXY":"http://https-proxy:8118","HTTP_PROXY":"http://http-proxy:8118","NO_PROXY":"localhost,solver"}`)
+	body := strings.NewReader(`{"CPA_UPLOAD_ENABLED":"1","CPA_MANAGEMENT_BASE":"http://host.docker.internal:8317/v0/management","CPA_MANAGEMENT_KEY":"key-123","CPA_UPLOAD_TIMEOUT_SEC":"25","CPA_UPLOAD_RETRIES":"4","CPA_UPLOAD_NAME_TEMPLATE":"{email}.json","CPA_UPLOAD_VERIFY":"0","CPA_UPLOAD_MODE":"json","EMAIL_MODE":"testmail","EMAIL_DOMAIN":"example.com","EMAIL_API":"http://mail:8080","TESTMAIL_API_KEY":"tm-key","TESTMAIL_NAMESPACE":"tm-ns","TESTMAIL_DOMAIN":"inbox.testmail.app","CLEARANCE_ENABLED":"1","CLEARANCE_MODE":"auto","CLEARANCE_AUTO_STOP":"0","CLEARANCE_COMPOSE_DIR":"C:/clearance","CF_IMPERSONATE":"chrome_131","CF_IMPERSONATE_FALLBACK":"chrome_124,chrome_120","REGISTER_PROXY":"http://register-proxy:8118","FLARESOLVERR_URL":"http://flaresolverr:8191","CLEARANCE_PROXY":"http://clearance-proxy:8118","CLEARANCE_URLS":"https://accounts.x.ai,https://x.ai","TURNSTILE_PROVIDER":"browser","TURNSTILE_MODE":"offscreen","LITE_SOLVER_URL":"http://solver:5072","CHROME_PATH":"/usr/bin/chromium","PROTOCOL_HTTP":"0","OUTPUT_SSO_ENABLED":"0","OUTPUT_GROK2API_SSO_ENABLED":"0","OUTPUT_CPA_ENABLED":"0","HTTP_POOL_SIZE":"12","PHYSICAL_CAP":"2","TURNSTILE_WORKERS":"3","TEMPMAIL_LOL_RETRIES":"42","TEMPMAIL_LOL_MIN_INTERVAL_MS":"2100","OAUTH_MIN_INTERVAL_SEC":"5","OAUTH_RETRY_SEC":"45","OAUTH_WORKERS":"1","PROBE_ENABLED":"0","PROBE_WARMUP_SEC":"2.5","HTTPS_PROXY":"http://https-proxy:8118","HTTP_PROXY":"http://http-proxy:8118","NO_PROXY":"localhost,solver"}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/config", body)
 	req.Header.Set("Content-Type", "application/json")
 	req.SetBasicAuth("admin", "secret")
@@ -52,6 +52,7 @@ func TestConfigRoundTripPreservesEditableValues(t *testing.T) {
 		"TURNSTILE_PROVIDER=browser",
 		"TURNSTILE_MODE=offscreen",
 		"LITE_SOLVER_URL=http://solver:5072",
+		"CHROME_PATH=/usr/bin/chromium",
 		"PROTOCOL_HTTP=0",
 		"TESTMAIL_API_KEY=tm-key",
 		"TESTMAIL_NAMESPACE=tm-ns",
@@ -77,6 +78,68 @@ func TestConfigRoundTripPreservesEditableValues(t *testing.T) {
 			t.Fatalf("config missing %q in:\n%s", want, text)
 		}
 	}
+}
+
+func TestRuntimeTemplateKeysAreEditableInWeb(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("..", "..", "config.env.example"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	editable := make(map[string]bool, len(editableConfigKeys))
+	for _, key := range editableConfigKeys {
+		editable[key] = true
+	}
+	for _, key := range envKeys(string(raw)) {
+		if !editable[key] {
+			t.Errorf("runtime config key %s is missing from Web editableConfigKeys", key)
+		}
+	}
+}
+
+func TestDockerTemplateKeysAreReferencedByCompose(t *testing.T) {
+	root := filepath.Join("..", "..")
+	envRaw, err := os.ReadFile(filepath.Join(root, ".env.docker.example"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	composeRaw, err := os.ReadFile(filepath.Join(root, "docker-compose.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	compose := string(composeRaw)
+	for _, key := range envKeys(string(envRaw)) {
+		if !strings.Contains(compose, "${"+key) {
+			t.Errorf("Docker template key %s is not referenced by docker-compose.yml", key)
+		}
+	}
+}
+
+func envKeys(content string) []string {
+	seen := map[string]bool{}
+	var keys []string
+	for _, line := range strings.Split(content, "\n") {
+		line = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(line), "#"))
+		key, _, ok := strings.Cut(line, "=")
+		key = strings.TrimSpace(key)
+		if !ok || !isEnvKey(key) || seen[key] {
+			continue
+		}
+		seen[key] = true
+		keys = append(keys, key)
+	}
+	return keys
+}
+
+func isEnvKey(value string) bool {
+	if value == "" || value[0] < 'A' || value[0] > 'Z' {
+		return false
+	}
+	for _, r := range value {
+		if (r < 'A' || r > 'Z') && (r < '0' || r > '9') && r != '_' {
+			return false
+		}
+	}
+	return true
 }
 
 func TestDownloadRunReturnsZip(t *testing.T) {

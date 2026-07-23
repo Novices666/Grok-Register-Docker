@@ -570,6 +570,7 @@ CLEARANCE_PROXY=http://privoxy:8118
 CLEARANCE_URLS=https://accounts.x.ai,https://x.ai,https://status.x.ai,https://console.x.ai,https://auth.x.ai
 TURNSTILE_PROVIDER=browser
 TURNSTILE_MODE=offscreen
+CHROME_PATH=
 PROTOCOL_HTTP=1
 HTTP_POOL_SIZE=8
 TEMPMAIL_LOL_RETRIES=30
@@ -772,6 +773,7 @@ merge_upgrade_keys() {
   env_set_key_if_missing "$dest" "CF_IMPERSONATE" "chrome_131"
   env_set_key_if_missing "$dest" "CF_IMPERSONATE_FALLBACK" "chrome_124,chrome_120"
   env_set_key_if_missing "$dest" "TURNSTILE_MODE" "offscreen"
+  env_set_key_if_missing "$dest" "CHROME_PATH" ""
   env_set_key_if_missing "$dest" "OAUTH_MIN_INTERVAL_SEC" "6"
   env_set_key_if_missing "$dest" "OAUTH_RETRY_SEC" "60"
   env_set_key_if_missing "$dest" "PROBE_WARMUP_SEC" "5"

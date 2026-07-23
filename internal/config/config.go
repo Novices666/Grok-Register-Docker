@@ -57,7 +57,8 @@ type Config struct {
 	TurnstileProvider string
 	TurnstileMode     string // offscreen | headless | auto
 	LiteSolverURL     string
-	TurnstileWorkers  int // 1-8 concurrent register/mint threads; set by start
+	ChromePath        string // optional Chromium executable override
+	TurnstileWorkers  int    // 1-8 concurrent register/mint threads; set by start
 
 	ProtocolHTTP bool
 	HTTPPoolSize int
@@ -243,6 +244,7 @@ func Save(path string, cfg Config) error {
 	if cfg.LiteSolverURL != "" {
 		b.WriteString(fmt.Sprintf("LITE_SOLVER_URL=%s\n", cfg.LiteSolverURL))
 	}
+	b.WriteString(fmt.Sprintf("CHROME_PATH=%s\n", cfg.ChromePath))
 	// TURNSTILE_WORKERS / TARGET: not persisted — use `grok start -t N --thread M`
 	b.WriteString(fmt.Sprintf("PROTOCOL_HTTP=%s\n", bool01(cfg.ProtocolHTTP)))
 	b.WriteString(fmt.Sprintf("HTTP_POOL_SIZE=%d\n", cfg.HTTPPoolSize))
@@ -451,6 +453,9 @@ func applyMap(cfg *Config, env map[string]string) {
 	if v, ok := env["LITE_SOLVER_URL"]; ok {
 		cfg.LiteSolverURL = v
 	}
+	if v, ok := env["CHROME_PATH"]; ok {
+		cfg.ChromePath = strings.TrimSpace(v)
+	}
 	// TURNSTILE_WORKERS / TARGET intentionally ignored from env (CLI-only).
 	if v, ok := env["PROTOCOL_HTTP"]; ok {
 		cfg.ProtocolHTTP = truthy(v)
@@ -571,5 +576,13 @@ func ApplyProxyEnv(cfg Config) {
 	if cfg.NoProxy != "" {
 		_ = os.Setenv("NO_PROXY", cfg.NoProxy)
 		_ = os.Setenv("no_proxy", cfg.NoProxy)
+	}
+}
+
+// ApplyRuntimeEnv configures process settings used by HTTP and browser helpers.
+func ApplyRuntimeEnv(cfg Config) {
+	ApplyProxyEnv(cfg)
+	if cfg.ChromePath != "" {
+		_ = os.Setenv("CHROME_PATH", cfg.ChromePath)
 	}
 }

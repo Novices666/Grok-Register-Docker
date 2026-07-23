@@ -26,6 +26,22 @@
 9. 未完成验证时，不得更新同步基准或声称同步完成。
 10. 未经用户明确授权，不得提交、推送、创建 Pull Request 或发布版本。
 
+## 分支命名规则
+
+除只读检查外，代码或文档修改应从最新的本仓库 `main` 创建独立分支，不直接在 `main` 上开发。
+
+| 变更类型 | 分支格式 | 示例 |
+|---|---|---|
+| 新功能 | `feat/<简短-kebab-case-说明>` | `feat/webui-history-preview` |
+| 缺陷修复 | `fix/<简短-kebab-case-说明>` | `fix/config-propagation` |
+| 文档 | `docs/<简短-kebab-case-说明>` | `docs/deployment-guide` |
+| 重构 | `refactor/<简短-kebab-case-说明>` | `refactor/pipeline-workers` |
+| 测试 | `test/<简短-kebab-case-说明>` | `test/output-gating` |
+| 工程维护 | `chore/<简短-kebab-case-说明>` | `chore/update-toolchain` |
+| 上游同步 | `sync/upstream-YYYYMMDD` | `sync/upstream-20260723` |
+
+分支说明使用小写英文、数字和连字符，不使用空格、下划线或个人/工具名前缀。`sync/upstream-*` 仅用于按本文件流程处理参考上游更新。
+
 ## 本仓库必须保留的扩展
 
 | 扩展 | 关键位置 |

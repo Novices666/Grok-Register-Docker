@@ -82,3 +82,43 @@ func TestLoadParsesOutputAndDelayControls(t *testing.T) {
 		t.Fatalf("OAuthWorkers = %v, want 1", cfg.OAuthWorkers)
 	}
 }
+
+func TestLoadAndApplyChromePath(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.env")
+	want := filepath.Join(dir, "chromium")
+	if err := os.WriteFile(path, []byte("CHROME_PATH="+want+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.ChromePath != want {
+		t.Fatalf("ChromePath = %q, want %q", cfg.ChromePath, want)
+	}
+
+	t.Setenv("CHROME_PATH", "old-path")
+	ApplyRuntimeEnv(cfg)
+	if got := os.Getenv("CHROME_PATH"); got != want {
+		t.Fatalf("CHROME_PATH = %q, want %q", got, want)
+	}
+}
+
+func TestApplyRuntimeEnvPreservesChromePathWhenConfigEmpty(t *testing.T) {
+	t.Setenv("CHROME_PATH", "process-path")
+	ApplyRuntimeEnv(Defaults())
+	if got := os.Getenv("CHROME_PATH"); got != "process-path" {
+		t.Fatalf("CHROME_PATH = %q, want process-path", got)
+	}
+}
+
+func TestEmbeddedAndRootConfigExamplesMatch(t *testing.T) {
+	rootExample, err := os.ReadFile(filepath.Join("..", "..", "config.env.example"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(rootExample) != embeddedExample {
+		t.Fatal("config.env.example and internal/config/example.env differ")
+	}
+}

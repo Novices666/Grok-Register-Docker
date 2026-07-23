@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/grok-free-register/grok-reg/internal/home"
@@ -35,14 +36,24 @@ func main() {
 	}
 
 	app := webui.New(webui.AppConfig{
-		Home:     paths.Root,
-		Username: user,
-		Password: pass,
-		GrokBin:  strings.TrimSpace(os.Getenv("GROK_BIN")),
+		Home:          paths.Root,
+		Username:      user,
+		Password:      pass,
+		GrokBin:       strings.TrimSpace(os.Getenv("GROK_BIN")),
+		DefaultTarget: envIntRange("GROK_TARGET", 10, 1, 10000),
 	})
 	fmt.Printf("[web] listening on %s\n", addr)
 	if err := http.ListenAndServe(addr, app.Handler()); err != nil {
 		fmt.Fprintf(os.Stderr, "错误: %v\n", err)
 		os.Exit(1)
 	}
+}
+
+func envIntRange(key string, fallback, min, max int) int {
+	raw := strings.TrimSpace(os.Getenv(key))
+	value, err := strconv.Atoi(raw)
+	if err != nil || value < min || value > max {
+		return fallback
+	}
+	return value
 }
