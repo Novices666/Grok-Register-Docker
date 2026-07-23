@@ -69,7 +69,7 @@ type Config struct {
 	OAuthRetrySec       float64 // rate-limit cooldown base
 	OAuthWorkers        int     // concurrent OAuth workers (1–4); 0 = auto
 	ProbeEnabled        bool
-	ProbeWarmupSec      float64 // sleep before first probe (default 3)
+	ProbeWarmupSec      float64 // sleep before first probe (default 5)
 
 	HTTPProxy  string
 	HTTPSProxy string
@@ -115,11 +115,11 @@ func Defaults() Config {
 		HTTPPoolSize:          8,
 		TempmailLOLRetries:    30,
 		TempmailLOLIntervalMS: 1500,
-		OAuthMinIntervalSec:   4, // was 10 per-worker (2 workers still collided)
-		OAuthRetrySec:         45,
+		OAuthMinIntervalSec:   6, // production-stable (4s still hits 429 under load)
+		OAuthRetrySec:         60,
 		OAuthWorkers:          0, // auto: 1 if target small, else 2
 		ProbeEnabled:          true,
-		ProbeWarmupSec:        1.5,
+		ProbeWarmupSec:        5, // stable: new tokens often 403 under 1.5–3s
 		HTTPProxy:             "http://127.0.0.1:40080",
 		HTTPSProxy:            "http://127.0.0.1:40080",
 		NoProxy:               "127.0.0.1,localhost",
