@@ -1,0 +1,13 @@
+.git
+bin
+data
+logs
+outputs
+.venv
+__pycache__
+*.pyc
+*.log
+.env
+config.env
+*.pem
+*.key
