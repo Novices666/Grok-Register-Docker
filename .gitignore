@@ -16,6 +16,9 @@ Thumbs.db
 
 # Local env / secrets
 .env
+.env.*
+!.env.example
+!.env.*.example
 config.env
 *.pem
 *.key
@@ -31,3 +34,10 @@ __pycache__/
 # Logs / runtime (should never be committed)
 *.log
 logs/
+work/
+outputs/
+state.json
+data/
+
+# Docker local overrides
+docker-compose.override.yml

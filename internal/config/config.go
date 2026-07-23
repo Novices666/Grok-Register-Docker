@@ -65,13 +65,20 @@ type Config struct {
 	TempmailLOLRetries    int
 	TempmailLOLIntervalMS int
 
-	OAuthMinIntervalSec float64
-	OAuthRetrySec       float64
+	OAuthMinIntervalSec float64 // global spacing between OAuth starts (all workers)
+	OAuthRetrySec       float64 // rate-limit cooldown base
+	OAuthWorkers        int     // concurrent OAuth workers (1–4); 0 = auto
 	ProbeEnabled        bool
+	ProbeWarmupSec      float64 // sleep before first probe (default 3)
 
 	HTTPProxy  string
 	HTTPSProxy string
 	NoProxy    string
+
+	// Output controls (Docker/WebUI extension)
+	OutputSSOEnabled  bool // accounts.txt + auth-sessions.jsonl
+	OutputGrok2APISSO bool // grok2api/tokens.txt (upstream layout)
+	OutputCPAEnabled  bool // OAuth + probe + CPA JSON
 
 	// CPA Management upload
 	CPAUploadEnabled      bool
@@ -108,12 +115,17 @@ func Defaults() Config {
 		HTTPPoolSize:          8,
 		TempmailLOLRetries:    30,
 		TempmailLOLIntervalMS: 1500,
-		OAuthMinIntervalSec:   10,
-		OAuthRetrySec:         60,
+		OAuthMinIntervalSec:   4, // was 10 per-worker (2 workers still collided)
+		OAuthRetrySec:         45,
+		OAuthWorkers:          0, // auto: 1 if target small, else 2
 		ProbeEnabled:          true,
+		ProbeWarmupSec:        1.5,
 		HTTPProxy:             "http://127.0.0.1:40080",
 		HTTPSProxy:            "http://127.0.0.1:40080",
 		NoProxy:               "127.0.0.1,localhost",
+		OutputSSOEnabled:      true,
+		OutputGrok2APISSO:     true,
+		OutputCPAEnabled:      true,
 		CPAUploadEnabled:      false,
 		CPAManagementBase:     "http://localhost:8317/v0/management",
 		CPAUploadTimeoutSec:   30,
@@ -240,7 +252,14 @@ func Save(path string, cfg Config) error {
 	b.WriteString(fmt.Sprintf("HTTP_PROXY=%s\n", cfg.HTTPProxy))
 	b.WriteString(fmt.Sprintf("NO_PROXY=%s\n", cfg.NoProxy))
 	b.WriteString(fmt.Sprintf("PROBE_ENABLED=%s\n", bool01(cfg.ProbeEnabled)))
+	b.WriteString(fmt.Sprintf("PROBE_WARMUP_SEC=%g\n", cfg.ProbeWarmupSec))
+	b.WriteString(fmt.Sprintf("OAUTH_MIN_INTERVAL_SEC=%g\n", cfg.OAuthMinIntervalSec))
+	b.WriteString(fmt.Sprintf("OAUTH_RETRY_SEC=%g\n", cfg.OAuthRetrySec))
+	b.WriteString(fmt.Sprintf("OAUTH_WORKERS=%d\n", cfg.OAuthWorkers))
 	b.WriteString(fmt.Sprintf("PHYSICAL_CAP=%d\n", cfg.PhysicalCap))
+	b.WriteString(fmt.Sprintf("OUTPUT_SSO_ENABLED=%s\n", bool01(cfg.OutputSSOEnabled)))
+	b.WriteString(fmt.Sprintf("OUTPUT_GROK2API_SSO_ENABLED=%s\n", bool01(cfg.OutputGrok2APISSO)))
+	b.WriteString(fmt.Sprintf("OUTPUT_CPA_ENABLED=%s\n", bool01(cfg.OutputCPAEnabled)))
 	b.WriteString(fmt.Sprintf("CPA_UPLOAD_ENABLED=%s\n", bool01(cfg.CPAUploadEnabled)))
 	b.WriteString(fmt.Sprintf("CPA_MANAGEMENT_BASE=%s\n", cfg.CPAManagementBase))
 	// CPA_MANAGEMENT_KEY: never auto-written (set manually in config.env)
@@ -463,10 +482,39 @@ func applyMap(cfg *Config, env map[string]string) {
 	if v, ok := env["PROBE_ENABLED"]; ok {
 		cfg.ProbeEnabled = truthy(v)
 	}
+	if v, ok := env["PROBE_WARMUP_SEC"]; ok {
+		if f, err := strconv.ParseFloat(v, 64); err == nil {
+			cfg.ProbeWarmupSec = f
+		}
+	}
+	if v, ok := env["OAUTH_MIN_INTERVAL_SEC"]; ok {
+		if f, err := strconv.ParseFloat(v, 64); err == nil {
+			cfg.OAuthMinIntervalSec = f
+		}
+	}
+	if v, ok := env["OAUTH_RETRY_SEC"]; ok {
+		if f, err := strconv.ParseFloat(v, 64); err == nil {
+			cfg.OAuthRetrySec = f
+		}
+	}
+	if v, ok := env["OAUTH_WORKERS"]; ok {
+		if n, err := strconv.Atoi(v); err == nil {
+			cfg.OAuthWorkers = n
+		}
+	}
 	if v, ok := env["PHYSICAL_CAP"]; ok {
 		if n, err := strconv.Atoi(v); err == nil {
 			cfg.PhysicalCap = n
 		}
+	}
+	if v, ok := env["OUTPUT_SSO_ENABLED"]; ok {
+		cfg.OutputSSOEnabled = truthy(v)
+	}
+	if v, ok := env["OUTPUT_GROK2API_SSO_ENABLED"]; ok {
+		cfg.OutputGrok2APISSO = truthy(v)
+	}
+	if v, ok := env["OUTPUT_CPA_ENABLED"]; ok {
+		cfg.OutputCPAEnabled = truthy(v)
 	}
 	if v, ok := env["CPA_UPLOAD_ENABLED"]; ok {
 		cfg.CPAUploadEnabled = truthy(v)
@@ -497,8 +545,6 @@ func applyMap(cfg *Config, env map[string]string) {
 		cfg.CPAUploadMode = v
 	}
 }
-
-
 
 func truthy(v string) bool {
 	v = strings.ToLower(strings.TrimSpace(v))

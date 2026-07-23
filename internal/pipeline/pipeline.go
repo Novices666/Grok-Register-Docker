@@ -63,13 +63,17 @@ type Engine struct {
 	oauthCh  chan SSOJob
 	uploader *cpa.Uploader
 
-	done     atomic.Int64 // CPA successes (counts toward -t)
+	done     atomic.Int64 // configured successes (counts toward -t)
 	reserved atomic.Int64 // in-flight accounts (email→register→oauth→probe)
 	ssoN     atomic.Int64
 	oaN      atomic.Int64
 	fail     atomic.Int64
 
-	start   time.Time
+	// Global OAuth pacing (shared by all oauth workers) — avoids dual-worker rate_limited.
+	oauthGateMu    sync.Mutex
+	oauthLastStart time.Time
+
+	start    time.Time
 	wgReg    sync.WaitGroup // S/P/C
 	wgOAuth  sync.WaitGroup
 	wgAux    sync.WaitGroup // status ticker etc
@@ -79,6 +83,17 @@ type Engine struct {
 // remainingCapacity = target - done - reserved (how many new accounts may start).
 func (e *Engine) remainingCapacity() int {
 	n := e.opt.Target - int(e.done.Load()) - int(e.reserved.Load())
+	if n < 0 {
+		return 0
+	}
+	return n
+}
+
+// turnstileMintNeed counts token demand by unfinished target slots. Reserved
+// accounts still need a token, so reserved must not block minting.
+func turnstileMintNeed(target, reserved, done, tDepth int) int {
+	_ = reserved
+	n := target - done - tDepth
 	if n < 0 {
 		return 0
 	}
@@ -145,24 +160,30 @@ func (e *Engine) run(ctx context.Context) error {
 
 	sWorkers, pWorkers, cWorkers, oauthWorkers, physCap := deriveWorkers(cfg)
 	e.phys = inventory.NewSemaphore(physCap)
-	// Pending email codes in flight: cap by target so target=5 doesn't open 12 boxes.
-	qPend := cfg.Target
-	if qPend <= 0 {
-		qPend = 4
-	}
-	if qPend > 6 {
-		qPend = 6
-	}
+	// Pending email codes in flight: follow --thread (was hard cap 6 → reserved flood).
+	qPend := sWorkers + 1
 	if qPend < 2 {
 		qPend = 2
 	}
+	if qPend > 4 {
+		qPend = 4
+	}
+	if cfg.Target > 0 && cfg.Target < qPend {
+		qPend = cfg.Target
+	}
 	e.qPending = inventory.NewSemaphore(qPend)
-	tSlots, qSlots := 4, 4
-	if cfg.Target > 0 && cfg.Target < 4 {
+	tSlots, qSlots := sWorkers+1, sWorkers+1
+	if tSlots < 2 {
+		tSlots, qSlots = 2, 2
+	}
+	if tSlots > 5 {
+		tSlots, qSlots = 5, 5
+	}
+	if cfg.Target > 0 && cfg.Target < tSlots {
 		tSlots, qSlots = cfg.Target, cfg.Target
 	}
 	e.inv = inventory.New[string, QItem](tSlots, qSlots)
-	log.Infof("workers S=%d P=%d C=%d OAuth=%d phys=%d q_pending=%d", sWorkers, pWorkers, cWorkers, oauthWorkers, physCap, qPend)
+	log.Infof("workers S=%d P=%d C=%d OAuth=%d phys=%d q_pending=%d t/q_slots=%d", sWorkers, pWorkers, cWorkers, oauthWorkers, physCap, qPend, tSlots)
 
 	_ = st.Set(func(s *state.Snapshot) {
 		s.Status = state.StatusRunning
@@ -282,8 +303,9 @@ func (e *Engine) run(ctx context.Context) error {
 	}
 	log.Infof("Turnstile provider=%s mode=%s workers=%d (pool → one-shot → chromedp)", e.turn.Name(), tsMode, sWorkers)
 	log.Infof("Turnstile mint: python=%s pool=%s script=%s", turnstile.DetectedPython(), turnstile.DetectedPoolScript(), turnstile.DetectedScript())
+	log.Infof("Output config: SSO=%s grok2api_sso=%s CPA=%s CPA_upload=%s", onOff(cfg.OutputSSOEnabled), onOff(cfg.OutputSSOEnabled && cfg.OutputGrok2APISSO), onOff(cfg.OutputCPAEnabled), onOff(cfg.OutputCPAEnabled && cfg.CPAUploadEnabled))
 	e.uploader = cpa.NewUploader(cpa.UploadConfig{
-		Enabled:      cfg.CPAUploadEnabled,
+		Enabled:      shouldRunCPAFlow(cfg) && cfg.CPAUploadEnabled,
 		BaseURL:      cfg.CPAManagementBase,
 		Key:          cfg.CPAManagementKey,
 		TimeoutSec:   cfg.CPAUploadTimeoutSec,
@@ -516,10 +538,7 @@ func (e *Engine) sWorker(ctx context.Context, id int, scfg protocol.SignupConfig
 			continue
 		}
 		tDepth, _ := e.inv.Depths()
-		need := e.remainingCapacity()
-		if need < 1 {
-			need = 1
-		}
+		need := turnstileMintNeed(e.opt.Target, int(e.reserved.Load()), int(e.done.Load()), tDepth)
 		if tDepth >= need {
 			select {
 			case <-ctx.Done():
@@ -578,10 +597,17 @@ func (e *Engine) pWorker(ctx context.Context, id int) {
 			}
 			continue
 		}
+		// Don't flood Q ahead of Turnstile: cap pending Q near S workers.
 		_, qDepth := e.inv.Depths()
-		qCap := e.remainingCapacity()
-		if qCap > 4 {
-			qCap = 4
+		qCap := e.opt.Cfg.TurnstileWorkers
+		if qCap < 1 {
+			qCap = 2
+		}
+		if qCap > 3 {
+			qCap = 3
+		}
+		if rem := e.remainingCapacity(); rem < qCap {
+			qCap = rem
 		}
 		if qCap < 1 {
 			qCap = 1
@@ -640,13 +666,18 @@ func (e *Engine) pWorker(ctx context.Context, id int) {
 			continue
 		}
 		item := QItem{Email: h.Email, Password: h.Password, Code: code, Handle: h}
-		if err := e.inv.PutQ(ctx, item, 2*time.Minute); err != nil {
+		// Q TTL must outlive slow Turnstile; onExpire frees reserved seat (was leaking → stuck).
+		email := h.Email
+		if err := e.inv.PutQWithExpire(ctx, item, 8*time.Minute, func() {
+			e.releaseReserve()
+			log.Warnf("[P%d] Q 过期丢弃 %s（座位已释放 reserved=%d）", id, email, e.reserved.Load())
+		}); err != nil {
 			e.qPending.Release()
 			e.releaseReserve()
 			return
 		}
 		e.qPending.Release()
-		// seat stays reserved until signup fail / oauth fail / CPA success
+		// seat stays reserved until signup fail / oauth fail / CPA success / Q TTL expire
 		log.Debugf("[P%d] Q ready %s (reserved=%d done=%d/%d)", id, h.Email, e.reserved.Load(), e.done.Load(), e.opt.Target)
 	}
 }
@@ -700,13 +731,32 @@ func (e *Engine) cWorker(ctx context.Context, id int, scfg protocol.SignupConfig
 		}
 
 		// ensure run dirs exist (first credential)
-		accPath := filepath.Join(e.opt.Run.SSO, "accounts.txt")
-		if err := cpa.AppendSSO(accPath, q.Email, q.Password, sso); err != nil {
-			log.Warnf("write sso: %v", err)
+		if e.opt.Cfg.OutputSSOEnabled {
+			accPath := filepath.Join(e.opt.Run.SSO, "accounts.txt")
+			if err := cpa.AppendSSO(accPath, q.Email, q.Password, sso); err != nil {
+				log.Warnf("write sso: %v", err)
+			}
+			_ = cpa.AppendAuthSession(filepath.Join(e.opt.Run.SSO, "auth-sessions.jsonl"), q.Email, sso)
 		}
-		_ = cpa.AppendAuthSession(filepath.Join(e.opt.Run.SSO, "auth-sessions.jsonl"), q.Email, sso)
+		// grok2api: bare SSO token only (upstream path: grok2api/tokens.txt)
+		if e.opt.Cfg.OutputSSOEnabled && e.opt.Cfg.OutputGrok2APISSO && e.opt.Run.Grok2API != "" {
+			if err := cpa.AppendGrok2APIToken(e.opt.Run.Grok2API, sso); err != nil {
+				log.Warnf("write grok2api token: %v", err)
+			}
+		}
 		n := e.ssoN.Add(1)
 		log.OKf("注册成功 #%d %s", n, q.Email)
+
+		if !shouldRunCPAFlow(e.opt.Cfg) {
+			d, ok := e.tryComplete()
+			if ok {
+				log.OKf("SSO 就绪 #%d/%d %s -> 跳过 CPA/OAuth", d, e.opt.Target, q.Email)
+				e.refreshState()
+			} else {
+				log.Warnf("已达目标，额外 SSO 跳过 CPA/OAuth: %s", q.Email)
+			}
+			continue
+		}
 
 		job := SSOJob{Email: q.Email, Password: q.Password, SSO: sso}
 		select {
@@ -725,42 +775,57 @@ func (e *Engine) cWorker(ctx context.Context, id int, scfg protocol.SignupConfig
 	}
 }
 
+func (e *Engine) waitOAuthSlot(ctx context.Context) error {
+	minInterval := time.Duration(e.opt.Cfg.OAuthMinIntervalSec * float64(time.Second))
+	if minInterval < 0 {
+		minInterval = 0
+	}
+	for {
+		e.oauthGateMu.Lock()
+		wait := time.Duration(0)
+		if !e.oauthLastStart.IsZero() && minInterval > 0 {
+			wait = time.Until(e.oauthLastStart.Add(minInterval))
+		}
+		if wait <= 0 {
+			e.oauthLastStart = time.Now()
+			e.oauthGateMu.Unlock()
+			return nil
+		}
+		e.oauthGateMu.Unlock()
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(wait):
+		}
+	}
+}
+
 func (e *Engine) oauthWorker(ctx context.Context, id int) {
 	defer e.wgOAuth.Done()
 	log := e.opt.Log
-	minInterval := time.Duration(e.opt.Cfg.OAuthMinIntervalSec * float64(time.Second))
-	if minInterval <= 0 {
-		minInterval = 10 * time.Second
-	}
-	var last time.Time
 	for job := range e.oauthCh {
 		// Soft-stop: still drain with seat accounting, but skip work past target.
 		if int(e.done.Load()) >= e.opt.Target {
 			e.releaseReserve()
 			continue
 		}
-		if !last.IsZero() {
-			if d := time.Until(last.Add(minInterval)); d > 0 {
-				select {
-				case <-ctx.Done():
-					return
-				case <-time.After(d):
-				}
-			}
+		if err := e.waitOAuthSlot(ctx); err != nil {
+			return
 		}
-		last = time.Now()
 		_ = e.opt.Store.Set(func(s *state.Snapshot) {
 			s.Phase = state.PhaseOAuth
 			s.PhaseDetail = fmt.Sprintf("正在 OAuth (%s)", job.Email)
 		})
 		log.Startf("OAuth %s", job.Email)
+		t0 := time.Now()
 		cred, err := e.oauth.Exchange(ctx, job.SSO)
 		if err != nil {
-			log.Warnf("OAuth fail %s: %v", job.Email, err)
+			log.Warnf("OAuth fail %s: %v (%.1fs)", job.Email, err, time.Since(t0).Seconds())
 			e.fail.Add(1)
 			e.releaseReserve()
 			continue
 		}
+		log.Infof("OAuth ok %s (%.1fs)", job.Email, time.Since(t0).Seconds())
 		e.oaN.Add(1)
 		doc := cpa.FromCredential(cred, job.Email)
 		_ = e.opt.Store.Set(func(s *state.Snapshot) {
@@ -768,7 +833,8 @@ func (e *Engine) oauthWorker(ctx context.Context, id int) {
 			s.PhaseDetail = fmt.Sprintf("探活 %s", job.Email)
 		})
 		if e.opt.Cfg.ProbeEnabled {
-			if err := cpa.Probe(doc, e.opt.Cfg.RegisterProxy); err != nil {
+			warmup := e.opt.Cfg.ProbeWarmupSec
+			if err := cpa.Probe(doc, e.opt.Cfg.RegisterProxy, warmup); err != nil {
 				log.Warnf("探活失败 %s: %v", job.Email, err)
 				path, _ := cpa.WriteAtomic(e.opt.Run.Discarded, doc, cpa.DefaultSecret())
 				_ = path
@@ -780,17 +846,24 @@ func (e *Engine) oauthWorker(ctx context.Context, id int) {
 		// Atomic complete: prevents multi-OAuth overshoot of -t.
 		d, ok := e.tryComplete()
 		if !ok {
-			// Target already filled by another worker — keep file in discarded.
-			path, _ := cpa.WriteAtomic(e.opt.Run.Discarded, doc, cpa.DefaultSecret())
-			log.Warnf("已达目标，额外号移入 discarded: %s (%s)", job.Email, filepath.Base(path))
+			if e.opt.Cfg.OutputCPAEnabled {
+				path, _ := cpa.WriteAtomic(e.opt.Run.Discarded, doc, cpa.DefaultSecret())
+				log.Warnf("已达目标，额外号移入 discarded: %s (%s)", job.Email, filepath.Base(path))
+			} else {
+				log.Warnf("已达目标，额外号跳过本地文件: %s", job.Email)
+			}
 			continue
 		}
-		path, err := cpa.WriteAtomic(e.opt.Run.CPA, doc, cpa.DefaultSecret())
-		if err != nil {
-			log.Warnf("写 CPA 失败: %v", err)
-			// seat already converted to done; count as fail but don't re-open flood
-			e.fail.Add(1)
-			continue
+		name := "未写本地文件"
+		if e.opt.Cfg.OutputCPAEnabled {
+			path, err := cpa.WriteAtomic(e.opt.Run.CPA, doc, cpa.DefaultSecret())
+			if err != nil {
+				log.Warnf("写 CPA 失败: %v", err)
+				// seat already converted to done; count as fail but don't re-open flood
+				e.fail.Add(1)
+				continue
+			}
+			name = filepath.Base(path)
 		}
 		if e.uploader != nil && e.uploader.Enabled() {
 			up := e.uploader
@@ -812,9 +885,20 @@ func (e *Engine) oauthWorker(ctx context.Context, id int) {
 				}
 			}()
 		}
-		log.OKf("CPA 就绪 #%d/%d %s -> %s", d, e.opt.Target, job.Email, filepath.Base(path))
+		log.OKf("CPA 就绪 #%d/%d %s -> %s", d, e.opt.Target, job.Email, name)
 		e.refreshState()
 	}
+}
+
+func shouldRunCPAFlow(cfg config.Config) bool {
+	return cfg.OutputCPAEnabled
+}
+
+func onOff(enabled bool) string {
+	if enabled {
+		return "on"
+	}
+	return "off"
 }
 
 func truncateRunes(s string, n int) string {
@@ -864,25 +948,42 @@ func deriveWorkers(cfg config.Config) (s, p, c, oa, phys int) {
 			s = cfg.TurnstileWorkers
 		}
 	}
-	// P workers: don't spawn 8 when target is 5 (was flooding tempmail).
+	// P workers: track --thread (S). Fixed P=4 with S=3 flooded reserved queue.
 	target := cfg.Target
 	if target <= 0 {
 		target = 10
 	}
-	p = target
+	if s < 1 {
+		s = 1
+	}
+	p = s
 	if p > 4 {
 		p = 4
+	}
+	if p > target {
+		p = target
 	}
 	if p < 1 {
 		p = 1
 	}
 	c = 2
-	if target < 2 {
+	if target < 2 || s < 2 {
 		c = 1
 	}
-	oa = 2
-	if s < 1 {
-		s = 1
+	// OAuth: default 1 when register concurrency ≥3 (device/auth 429); else 2.
+	oa = cfg.OAuthWorkers
+	if oa <= 0 {
+		if s >= 3 || target >= 8 {
+			oa = 1
+		} else {
+			oa = 2
+		}
+	}
+	if oa > 4 {
+		oa = 4
+	}
+	if oa < 1 {
+		oa = 1
 	}
 	return
 }
