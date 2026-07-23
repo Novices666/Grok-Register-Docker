@@ -176,9 +176,11 @@ func (a *App) index(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_ = redesignedPageTemplate.Execute(w, map[string]string{
+	if err := redesignedPageTemplate.Execute(w, map[string]string{
 		"Title": "Grok Register 控制台",
-	})
+	}); err != nil {
+		http.Error(w, "template render failed", http.StatusInternalServerError)
+	}
 }
 
 func (a *App) status(w http.ResponseWriter, r *http.Request) {
@@ -244,15 +246,44 @@ func (a *App) logs(w http.ResponseWriter, r *http.Request) {
 	}
 	path := a.latestLogPath()
 	if path == "" {
-		writeJSON(w, http.StatusOK, map[string]any{"path": "", "lines": []string{}})
+		writeJSON(w, http.StatusOK, map[string]any{"path": "", "lines": []string{}, "size": 0, "mtime": 0})
 		return
+	}
+	st, err := os.Stat(path)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+		return
+	}
+	// Clients may send size+mtime to skip re-reading unchanged logs.
+	if raw := strings.TrimSpace(r.URL.Query().Get("since_size")); raw != "" {
+		if size, err := strconv.ParseInt(raw, 10, 64); err == nil {
+			mtime := int64(0)
+			if mraw := strings.TrimSpace(r.URL.Query().Get("since_mtime")); mraw != "" {
+				mtime, _ = strconv.ParseInt(mraw, 10, 64)
+			}
+			if size == st.Size() && mtime == st.ModTime().Unix() {
+				writeJSON(w, http.StatusOK, map[string]any{
+					"path":      path,
+					"lines":     nil,
+					"size":      st.Size(),
+					"mtime":     st.ModTime().Unix(),
+					"unchanged": true,
+				})
+				return
+			}
+		}
 	}
 	lines, err := tailFile(path, tail)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"path": path, "lines": lines})
+	writeJSON(w, http.StatusOK, map[string]any{
+		"path":  path,
+		"lines": lines,
+		"size":  st.Size(),
+		"mtime": st.ModTime().Unix(),
+	})
 }
 
 func (a *App) runs(w http.ResponseWriter, r *http.Request) {
@@ -319,6 +350,18 @@ func (a *App) checkCPA(w http.ResponseWriter, r *http.Request) {
 	cfg := a.readConfig()
 	base := strings.TrimRight(cfg["CPA_MANAGEMENT_BASE"], "/")
 	key := strings.TrimSpace(cfg["CPA_MANAGEMENT_KEY"])
+	// Optional body overrides saved config so the UI can probe without writing disk.
+	if r.Body != nil {
+		var body map[string]string
+		if err := json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&body); err == nil {
+			if v, ok := body["CPA_MANAGEMENT_BASE"]; ok {
+				base = strings.TrimRight(strings.TrimSpace(v), "/")
+			}
+			if v, ok := body["CPA_MANAGEMENT_KEY"]; ok {
+				key = strings.TrimSpace(v)
+			}
+		}
+	}
 	if base == "" || key == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "请先填写 CPA_MANAGEMENT_BASE 和 CPA_MANAGEMENT_KEY"})
 		return
@@ -340,11 +383,11 @@ func (a *App) checkCPA(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer resp.Body.Close()
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
 	writeJSON(w, http.StatusOK, map[string]any{
 		"ok":     resp.StatusCode >= 200 && resp.StatusCode < 300,
 		"status": resp.StatusCode,
-		"body":   string(body),
+		"body":   string(respBody),
 	})
 }
 
@@ -541,6 +584,10 @@ func (a *App) listRuns() ([]runSummary, error) {
 	if err != nil {
 		return nil, err
 	}
+	runningID := ""
+	if snap, err := a.loadSnapshot(); err == nil && snap.Status == state.StatusRunning {
+		runningID = snap.RunID
+	}
 	runs := make([]runSummary, 0)
 	for _, entry := range entries {
 		if !entry.IsDir() {
@@ -551,7 +598,8 @@ func (a *App) listRuns() ([]runSummary, error) {
 		}
 		info, _ := entry.Info()
 		dir := filepath.Join(root, entry.Name())
-		summary := a.summarizeRun(entry.Name(), dir, info.ModTime())
+		// List view skips dirSize walks; detail computes total size on demand.
+		summary := a.summarizeRun(entry.Name(), dir, info.ModTime(), runningID, false)
 		runs = append(runs, summary)
 	}
 	sort.Slice(runs, func(i, j int) bool { return runs[i].ID > runs[j].ID })
@@ -561,7 +609,7 @@ func (a *App) listRuns() ([]runSummary, error) {
 	return runs, nil
 }
 
-func (a *App) summarizeRun(id, dir string, mod time.Time) runSummary {
+func (a *App) summarizeRun(id, dir string, mod time.Time, runningID string, withSize bool) runSummary {
 	logInfo, logErr := os.Stat(a.runLogPath(id))
 	logSize := int64(0)
 	logExists := false
@@ -569,20 +617,20 @@ func (a *App) summarizeRun(id, dir string, mod time.Time) runSummary {
 		logExists = true
 		logSize = logInfo.Size()
 	}
-	current := false
-	if snap, err := a.loadSnapshot(); err == nil && snap.Status == state.StatusRunning && snap.RunID == id {
-		current = true
+	total := int64(0)
+	if withSize {
+		total = dirSize(dir)
 	}
 	return runSummary{
-		ID:             id,
+		ID: id,
 		// SSO: account lines in accounts.txt (not SSO-dir file count).
-		SSOCount:       countTokenLines(filepath.Join(dir, "SSO", "accounts.txt")),
+		SSOCount: countTokenLines(filepath.Join(dir, "SSO", "accounts.txt")),
 		// grok2api: non-empty lines (may include duplicate tokens).
-		Grok2APISSO:    countTokenLines(filepath.Join(dir, "grok2api", "tokens.txt")),
+		Grok2APISSO: countTokenLines(filepath.Join(dir, "grok2api", "tokens.txt")),
 		// CPA: on-disk JSON files (same name overwrites → unique sessions).
 		CPACount:       countRunFiles(filepath.Join(dir, "CPA"), false, ".json"),
 		Discarded:      countRunFiles(filepath.Join(dir, "discarded"), false, ".json"),
-		TotalSize:      dirSize(dir),
+		TotalSize:      total,
 		LogExists:      logExists,
 		LogSize:        logSize,
 		ModifiedAt:     mod.Format(time.RFC3339),
@@ -592,7 +640,7 @@ func (a *App) summarizeRun(id, dir string, mod time.Time) runSummary {
 		DownloadCPA:    "/api/runs/download?id=" + id + "&category=cpa",
 		DownloadBad:    "/api/runs/download?id=" + id + "&category=discarded",
 		DownloadLog:    "/api/runs/download?id=" + id + "&category=log",
-		DeleteDisabled: current,
+		DeleteDisabled: runningID != "" && runningID == id,
 	}
 }
 
@@ -605,7 +653,11 @@ func (a *App) loadRunDetail(id string, logTail int) (runDetail, error) {
 	if !info.IsDir() {
 		return runDetail{}, os.ErrNotExist
 	}
-	summary := a.summarizeRun(id, root, info.ModTime())
+	runningID := ""
+	if snap, err := a.loadSnapshot(); err == nil && snap.Status == state.StatusRunning {
+		runningID = snap.RunID
+	}
+	summary := a.summarizeRun(id, root, info.ModTime(), runningID, true)
 	detail := runDetail{
 		runSummary: summary,
 		Files: map[string][]runFile{
@@ -614,6 +666,12 @@ func (a *App) loadRunDetail(id string, logTail int) (runDetail, error) {
 			"cpa":       listRunFiles(filepath.Join(root, "CPA"), "cpa"),
 			"discarded": listRunFiles(filepath.Join(root, "discarded"), "discarded"),
 		},
+	}
+	// Cap listed files so huge CPA dirs stay responsive in the Web UI.
+	for key, files := range detail.Files {
+		if len(files) > 200 {
+			detail.Files[key] = files[:200]
+		}
 	}
 	logPath := a.runLogPath(id)
 	if st, err := os.Stat(logPath); err == nil && !st.IsDir() {
@@ -910,11 +968,59 @@ func (a *App) runCommand(args ...string) (string, error) {
 }
 
 func tailFile(path string, maxLines int) ([]string, error) {
-	data, err := os.ReadFile(path)
+	if maxLines < 1 {
+		return []string{}, nil
+	}
+	f, err := os.Open(path)
 	if err != nil {
 		return nil, err
 	}
-	text := strings.ReplaceAll(string(data), "\r\n", "\n")
+	defer f.Close()
+	st, err := f.Stat()
+	if err != nil {
+		return nil, err
+	}
+	size := st.Size()
+	if size == 0 {
+		return []string{}, nil
+	}
+
+	const chunkSize int64 = 32 * 1024
+	const maxRead int64 = 8 << 20 // cap reverse scan for huge logs
+	var (
+		data      []byte
+		pos       = size
+		newlines  = 0
+		bytesRead int64
+	)
+	for pos > 0 && newlines <= maxLines && bytesRead < maxRead {
+		readSize := chunkSize
+		if pos < readSize {
+			readSize = pos
+		}
+		pos -= readSize
+		buf := make([]byte, readSize)
+		if _, err := f.ReadAt(buf, pos); err != nil {
+			return nil, err
+		}
+		data = append(buf, data...)
+		bytesRead += readSize
+		newlines = 0
+		for _, b := range data {
+			if b == '\n' {
+				newlines++
+			}
+		}
+	}
+
+	text := string(data)
+	if pos > 0 {
+		// Drop the partial first line when we did not start at byte 0.
+		if i := strings.IndexByte(text, '\n'); i >= 0 {
+			text = text[i+1:]
+		}
+	}
+	text = strings.ReplaceAll(text, "\r\n", "\n")
 	text = strings.TrimRight(text, "\n")
 	if text == "" {
 		return []string{}, nil
