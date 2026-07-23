@@ -102,7 +102,8 @@ func printHelp() {
 
 说明:
   -t / --target   目标账号数，按当前输出配置计数 (1-10000)
-  --thread / -j   并发注册/Turnstile 线程数 (1-8)，不再写入 config.env
+  --thread / -j   并发注册/Turnstile 线程数 (1-8)，默认交互回车=2（较稳）
+  默认节奏:       OAUTH_MIN_INTERVAL_SEC=6  PROBE_WARMUP_SEC=5  OAUTH_RETRY_SEC=60
   logs 等级:      默认 --info（隐藏 DBG）；--debug 显示全部；--warn / --error 更严
                   例: grok logs -f --debug
   升级后请查看 ~/.grok/config.env.example 了解新增配置项

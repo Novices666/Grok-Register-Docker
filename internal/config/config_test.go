@@ -32,17 +32,17 @@ func TestLoadUsesCurrentFlowControlDefaults(t *testing.T) {
 	if cfg.TempmailLOLIntervalMS != 1500 {
 		t.Fatalf("TempmailLOLIntervalMS = %d, want 1500", cfg.TempmailLOLIntervalMS)
 	}
-	if cfg.OAuthMinIntervalSec != 4 {
-		t.Fatalf("OAuthMinIntervalSec = %v, want 4", cfg.OAuthMinIntervalSec)
+	if cfg.OAuthMinIntervalSec != 6 {
+		t.Fatalf("OAuthMinIntervalSec = %v, want 6", cfg.OAuthMinIntervalSec)
 	}
-	if cfg.OAuthRetrySec != 45 {
-		t.Fatalf("OAuthRetrySec = %v, want 45", cfg.OAuthRetrySec)
+	if cfg.OAuthRetrySec != 60 {
+		t.Fatalf("OAuthRetrySec = %v, want 60", cfg.OAuthRetrySec)
 	}
 	if !cfg.ProbeEnabled {
 		t.Fatalf("ProbeEnabled = false, want true")
 	}
-	if cfg.ProbeWarmupSec != 1.5 {
-		t.Fatalf("ProbeWarmupSec = %v, want 1.5", cfg.ProbeWarmupSec)
+	if cfg.ProbeWarmupSec != 5 {
+		t.Fatalf("ProbeWarmupSec = %v, want 5", cfg.ProbeWarmupSec)
 	}
 }
 

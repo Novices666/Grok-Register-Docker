@@ -9,9 +9,9 @@
 | 项目 | 内容 |
 |---|---|
 | 上游仓库 | `https://github.com/Charles-0509/Grok-Register` |
-| 上次已审查上游提交 | `3a66a6a` |
+| 上次已审查上游提交 | `7dc93c0` |
 | 本仓库最初基于的上游提交 | `a8d87bd` |
-| 提交时间 | `2026-07-23 12:50:10 +0800` |
+| 提交时间 | `2026-07-23 13:09:37 +0800` |
 
 “上次已审查上游提交”表示已经检查到该提交，不表示审查范围内的所有提交都已采用。选择性移植时，必须在同步记录中单独列出实际采用和跳过的内容。
 
@@ -90,6 +90,18 @@ docker restart grok-register
 
 ## 同步记录
 
+
+### 2026-07-23 上游同步（稳定默认 7dc93c0）
+
+| 项目 | 内容 |
+|---|---|
+| 同步分支 | `sync/upstream-20260723b` |
+| 审查范围 | `3a66a6a..7dc93c0` |
+| 新的审查截止 | `7dc93c0` |
+| 实际移植 | `7dc93c0` 生产稳定默认：`OAUTH_MIN_INTERVAL_SEC=6`、`OAUTH_RETRY_SEC=60`、`PROBE_WARMUP_SEC=5`；Probe 无参默认 warmup 5s；交互线程回车默认 2 的说明与模板同步 |
+| 明确跳过 | 上游 README 整页替换（仅保留本仓库文档结构；默认节奏说明在 CLI help / 配置模板中同步） |
+| 兼容调整 | Docker（`.env.docker.example`、`entrypoint`）、Web 配置联动仍读配置文件；本仓库 `OUTPUT_*` 不受影响 |
+| 验证结果 | `go test` config/cpa/pipeline/webui/inventory/logx 通过；linux build grok/grok-web 通过；docker compose config 通过 |
 
 ### 2026-07-23 上游同步（解卡修复 3a66a6a）
 
