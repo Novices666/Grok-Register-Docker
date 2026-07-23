@@ -212,16 +212,14 @@ grok-register -> privoxy -> WARP
 | `TURNSTILE_MODE` | `offscreen` | 浏览器运行模式 |
 | `WARP_LICENSE_KEY` | 空 | 可选 WARP+ License |
 
-默认映射的本机端口：
+根目录一键 Docker 栈**仅向宿主机映射 Web 管理端口**（清障组件只在 compose 内网互通）：
 
-| 服务 | 地址 |
-|---|---|
-| Web 控制台 | `127.0.0.1:8090` |
-| WARP SOCKS5 | `127.0.0.1:40000` |
-| Privoxy HTTP | `127.0.0.1:40080` |
-| FlareSolverr | `127.0.0.1:8191` |
+| 服务 | 宿主机地址 | 说明 |
+|---|---|---|
+| Web 控制台 | `127.0.0.1:8090` | 唯一需要暴露的端口，可用 `WEB_PORT` 修改 |
+| WARP / Privoxy / FlareSolverr | 不映射到宿主机 | 容器内通过 `privoxy:8118`、`flaresolverr:8191` 访问 |
 
-端口可在 `.env` 中通过 `WEB_PORT`、`WARP_SOCKS_PORT`、`PRIVOXY_PORT` 和 `FLARESOLVERR_PORT` 修改。
+若本机原生运行 `grok`、需要单独拉起清障栈，请使用 [clearance/docker-compose.yml](clearance/docker-compose.yml)，那时才会在本机映射 `40000/40080/8191`。
 
 ### CPA Management
 
