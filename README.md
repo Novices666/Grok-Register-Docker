@@ -2,7 +2,9 @@
 
 面向 Docker 部署的 Grok 注册与输出管理工具，提供 Web 控制台、CLI、代理清障链路以及可配置的 SSO / CPA 输出。
 
-本仓库由 [Charles-0509/Grok-Register](https://github.com/Charles-0509/Grok-Register) 衍生，现由本仓库独立维护。上游更新不会自动合并，具体同步原则见 [MERGE_GUIDE.zh-CN.md](MERGE_GUIDE.zh-CN.md)。
+本仓库由 [Charles-0509/Grok-Register](https://github.com/Charles-0509/Grok-Register) 衍生，现由本仓库独立维护。
+
+上游更新不会自动合并，具体同步原则见 [MERGE_GUIDE.zh-CN.md](MERGE_GUIDE.zh-CN.md)。
 
 > 请仅在遵守目标服务条款及所在地法律法规的前提下使用。账号、代理、邮箱和输出凭据均由使用者自行管理。
 
@@ -238,7 +240,50 @@ CPA_MANAGEMENT_KEY=your-key
 
 ## 更新
 
-更新前建议备份 `.env` 和 `data/grok`：
+更新前建议备份 `.env` 和 `data/grok`。脚本与手动命令都**不会**删除 `./data/grok` 或 `.env`；不要使用会清空该目录的清理命令，除非已经确认不再需要历史输出和配置。
+
+升级后**不会**自动把模板里的新键补进已有的 `.env` 或 `data/grok/config.env`；缺省项在运行时用代码/Compose 默认值，若要落盘请对照 [`.env.docker.example`](.env.docker.example) 与 [`config.env.example`](config.env.example) 自行补齐，或在 Web 控制台保存配置（仅写入 `config.env` 中网页可编辑项）。
+
+### 推荐：一键更新脚本（Linux）
+
+仓库提供 [scripts/update-docker.sh](scripts/update-docker.sh)，在仓库根目录执行：
+
+```bash
+chmod +x scripts/update-docker.sh   # 首次需要
+bash scripts/update-docker.sh
+```
+
+默认流程：
+
+1. 检查 Docker / Compose 与 `.env`
+2. `git pull --ff-only` 拉取本仓库代码
+3. 拉取第三方依赖镜像（WARP、Privoxy、FlareSolverr 等）
+4. 重新构建 `grok-register:local` 并 `up -d --force-recreate`
+5. 打印服务状态与最近日志
+
+常用选项：
+
+```bash
+# 本地已有代码改动，只重建镜像并重启
+bash scripts/update-docker.sh --no-git
+
+# 只刷新第三方镜像，不重建主应用
+bash scripts/update-docker.sh --pull-only -y
+
+# 跳过交互确认；更新后清理悬空镜像
+bash scripts/update-docker.sh -y --prune
+
+# 查看全部参数
+bash scripts/update-docker.sh --help
+```
+
+说明：
+
+- 若容器正在运行，重建会短暂中断服务；进行中的注册任务会被打断，脚本会提示确认（`-y` 跳过）。
+- 工作区有未提交修改时，`git pull --ff-only` 可能失败，可先处理本地改动或改用 `--no-git`。
+- 需 Docker Compose v2，且构建机能访问对应镜像源。
+
+### 手动更新
 
 ```bash
 git pull --ff-only
@@ -251,8 +296,6 @@ docker compose ps
 ```bash
 docker compose logs --tail 200 grok-register
 ```
-
-不要使用会删除 `data/grok` 的清理命令，除非已经确认不再需要历史输出和配置。
 
 ## 原生 CLI
 
@@ -313,7 +356,7 @@ Grok-Register-Docker/
 ├── cmd/web/                  # Web 服务入口
 ├── internal/                 # 注册、配置、输出及 Web 逻辑
 ├── internal/webui/templates/ # Web 页面
-├── scripts/                  # 安装和 Turnstile 辅助脚本
+├── scripts/                  # 安装、Docker 更新与 Turnstile 辅助脚本
 ├── clearance/                # 独立清障配置
 ├── docker/                   # 主容器入口
 ├── Dockerfile
