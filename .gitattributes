@@ -1,0 +1,5 @@
+# Shell scripts must use LF so Docker/Linux shebangs work on Windows checkouts.
+*.sh text eol=lf
+docker/entrypoint.sh text eol=lf
+scripts/*.sh text eol=lf
+clearance/*.sh text eol=lf

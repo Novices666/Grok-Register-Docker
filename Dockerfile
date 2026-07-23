@@ -51,7 +51,8 @@ COPY scripts/turnstile_mint.py /usr/local/share/grok-reg/turnstile_mint.py
 COPY scripts/turnstile_pool.py /usr/local/share/grok-reg/turnstile_pool.py
 COPY docker/entrypoint.sh /usr/local/bin/grok-docker-entrypoint
 
-RUN chmod +x /usr/local/bin/grok /usr/local/bin/grok-web /usr/local/bin/grok-docker-entrypoint /usr/local/share/grok-reg/turnstile_mint.py /usr/local/share/grok-reg/turnstile_pool.py \
+RUN sed -i 's/\r$//' /usr/local/bin/grok-docker-entrypoint \
+    && chmod +x /usr/local/bin/grok /usr/local/bin/grok-web /usr/local/bin/grok-docker-entrypoint /usr/local/share/grok-reg/turnstile_mint.py /usr/local/share/grok-reg/turnstile_pool.py \
     && mkdir -p /data/grok
 
 VOLUME ["/data/grok"]
