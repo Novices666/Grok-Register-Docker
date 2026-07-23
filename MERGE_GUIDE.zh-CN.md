@@ -42,13 +42,17 @@
 
 ## 输出语义
 
+默认三开关均为 `1`，行为与上游完整流水线一致。语义冲突时以上游为准；下列为显式扩展。
+
 | 配置 | 结果 |
 |---|---|
-| `OUTPUT_SSO_ENABLED=1` | 输出 `accounts.txt` 和 `auth-sessions.jsonl` |
-| `OUTPUT_GROK2API_SSO_ENABLED=1` | 在 SSO 输出开启时，额外输出 `grok2api/tokens.txt` |
-| `OUTPUT_CPA_ENABLED=0` | 注册拿到 SSO 后即计成功，不进入 OAuth/CPA 链路 |
-| `OUTPUT_CPA_ENABLED=1` | 继续 OAuth、CPA 探活和 CPA JSON 输出 |
-| `CPA_UPLOAD_ENABLED=1` | 在 CPA 输出开启时自动上传 CPA JSON |
+| `OUTPUT_SSO_ENABLED=1`（默认） | 输出 `accounts.txt` 和 `auth-sessions.jsonl` |
+| `OUTPUT_SSO_ENABLED=0` | 不写 SSO 文件；若 CPA=1 仍走 OAuth/CPA |
+| `OUTPUT_GROK2API_SSO_ENABLED=1`（默认） | 在 SSO 输出开启时，额外输出 `grok2api/tokens.txt` |
+| `OUTPUT_CPA_ENABLED=1`（默认） | 与上游一致：OAuth、探活、CPA JSON；目标按 CPA 就绪计 |
+| `OUTPUT_CPA_ENABLED=0` | 本仓扩展：拿到 SSO 即计完成，跳过 OAuth/CPA/上传 |
+| `CPA_UPLOAD_ENABLED=1` | 仅当 `OUTPUT_CPA_ENABLED=1` 时自动上传 |
+| `TURNSTILE_WORKERS` | 仅 Web/Docker 启动传 `-j` 的便利默认；`config.Load` 忽略（上游） |
 
 ## 合并后验证
 

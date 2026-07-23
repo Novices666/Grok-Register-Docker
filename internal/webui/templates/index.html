@@ -411,7 +411,7 @@
         <div class="progress-track" aria-label="任务进度"><div id="progressFill" class="progress-fill"></div></div>
       </div>
       <div class="run-metrics">
-        <div class="metric"><strong id="done" class="metric-value">0</strong><span class="metric-label">成功</span></div>
+        <div class="metric"><strong id="done" class="metric-value">0</strong><span class="metric-label">完成</span></div>
         <div class="metric"><strong id="target" class="metric-value">0</strong><span class="metric-label">目标</span></div>
         <div class="metric"><strong id="oauth" class="metric-value">0</strong><span class="metric-label">OAuth</span></div>
         <div class="metric"><strong id="fail" class="metric-value">0</strong><span class="metric-label">失败</span></div>
@@ -491,9 +491,9 @@
       { id: "cpa", label: "CPA 上传", description: "配置 Management API、上传格式、重试和结果校验。" }
     ];
     const fields = [
-      { key: "OUTPUT_SSO_ENABLED", group: "output", label: "SSO 文件输出", type: "bool", note: "写入 accounts.txt 和 auth-sessions.jsonl。" },
-      { key: "OUTPUT_GROK2API_SSO_ENABLED", group: "output", label: "grok2api SSO", type: "bool", note: "写入 grok2api/tokens.txt；依赖 SSO 文件输出。" },
-      { key: "OUTPUT_CPA_ENABLED", group: "output", label: "CPA 输出", type: "bool", note: "关闭后，获得 SSO 即计成功，并跳过 OAuth、探活和 CPA JSON。" },
+      { key: "OUTPUT_SSO_ENABLED", group: "output", label: "SSO 文件输出", type: "bool", note: "默认开启（与上游一致）。写入 accounts.txt 和 auth-sessions.jsonl；关闭时仍可继续 OAuth/CPA，只是不写 SSO 文件。" },
+      { key: "OUTPUT_GROK2API_SSO_ENABLED", group: "output", label: "grok2api SSO", type: "bool", note: "默认开启。写入 grok2api/tokens.txt；依赖 SSO 文件输出。" },
+      { key: "OUTPUT_CPA_ENABLED", group: "output", label: "CPA 输出", type: "bool", note: "默认开启（与上游全链路一致）。关闭后：拿到 SSO 即计完成并跳过 OAuth/探活/CPA；开启时完成口径为 CPA 就绪。" },
       { key: "EMAIL_MODE", group: "email", label: "邮箱模式", type: "select", options: [["tempmail", "tempmail.lol"], ["testmail", "testmail.app"], ["custom", "自建域名邮箱"]] },
       { key: "EMAIL_DOMAIN", group: "email", label: "自建邮箱域名", placeholder: "example.com", depends: "email-custom" },
       { key: "EMAIL_API", group: "email", label: "自建邮箱 API", type: "url", placeholder: "http://127.0.0.1:8080", depends: "email-custom" },
@@ -506,7 +506,7 @@
       { key: "CLEARANCE_MODE", group: "clearance", label: "清障策略", type: "select", options: [["auto", "自动：遇到拦截时启动"], ["always", "总是启动"], ["never", "永不启动"]], depends: "clearance" },
       { key: "CLEARANCE_AUTO_STOP", group: "clearance", label: "结束后停止清障栈", type: "bool", depends: "clearance" },
       { key: "CLEARANCE_COMPOSE_DIR", group: "clearance", label: "清障 Compose 目录", placeholder: "留空则自动发现", depends: "clearance" },
-      { key: "REGISTER_PROXY", group: "clearance", label: "注册代理", type: "url", depends: "clearance" },
+      { key: "REGISTER_PROXY", group: "clearance", label: "注册代理", type: "url", note: "协议注册与浏览器 mint 使用的 HTTP 代理；与是否启用清障栈无关。" },
       { key: "FLARESOLVERR_URL", group: "clearance", label: "FlareSolverr URL", type: "url", depends: "clearance" },
       { key: "CLEARANCE_PROXY", group: "clearance", label: "清障代理", type: "url", depends: "clearance" },
       { key: "CLEARANCE_URLS", group: "clearance", label: "清障 URL", type: "textarea", wide: true, depends: "clearance" },
@@ -519,7 +519,7 @@
       { key: "PROTOCOL_HTTP", group: "engine", label: "协议 HTTP 客户端", type: "bool" },
       { key: "HTTP_POOL_SIZE", group: "engine", label: "HTTP 并发池", type: "number", min: "1", step: "1" },
       { key: "PHYSICAL_CAP", group: "engine", label: "物理并发上限", type: "number", min: "0", step: "1", note: "0 表示不额外限制。" },
-      { key: "TURNSTILE_WORKERS", group: "engine", label: "默认注册线程", type: "number", min: "1", max: "8", step: "1", note: "同步到任务控制条，启动时仍可临时调整。" },
+      { key: "TURNSTILE_WORKERS", group: "engine", label: "Web 启动默认线程", type: "number", min: "1", max: "8", step: "1", note: "仅 Web/Docker 启动时作为 --thread/-j 默认值；CLI 的 grok start 不读此项（与上游一致），请用 --thread。" },
       { key: "OAUTH_MIN_INTERVAL_SEC", group: "engine", label: "OAuth 最小间隔", type: "number", min: "0", step: "0.5", suffix: "秒" },
       { key: "OAUTH_RETRY_SEC", group: "engine", label: "OAuth 重试冷却", type: "number", min: "0", step: "0.5", suffix: "秒" },
       { key: "OAUTH_WORKERS", group: "engine", label: "OAuth Workers", type: "number", min: "0", max: "4", step: "1", note: "0 表示自动选择并发数。", depends: "cpa-output" },
@@ -798,7 +798,7 @@
     }
 
     function runCard(run, active) {
-      return `<button type="button" class="run-card${active ? " active" : ""}" data-run-id="${escapeHTML(run.id)}"><span class="run-card-top"><b class="run-card-id">${escapeHTML(run.id)}</b><span class="run-card-date">${escapeHTML(formatDate(run.modified_at))}</span></span><span class="chips"><span class="chip">SSO ${run.sso_count || 0}</span><span class="chip">grok2api ${run.grok2api_sso_count || 0}</span><span class="chip">CPA ${run.cpa_count || 0}</span><span class="chip">丢弃 ${run.discarded_count || 0}</span></span></button>`;
+      return `<button type="button" class="run-card${active ? " active" : ""}" data-run-id="${escapeHTML(run.id)}"><span class="run-card-top"><b class="run-card-id">${escapeHTML(run.id)}</b><span class="run-card-date">${escapeHTML(formatDate(run.modified_at))}</span></span><span class="chips"><span class="chip" title="accounts.txt 行数">账号 ${run.sso_count || 0}</span><span class="chip" title="tokens.txt 非空行数">token 行 ${run.grok2api_sso_count || 0}</span><span class="chip" title="CPA 目录 JSON 文件数">CPA 文件 ${run.cpa_count || 0}</span><span class="chip">丢弃 ${run.discarded_count || 0}</span></span></button>`;
     }
     function bindRunCards(root) {
       for (const card of root.querySelectorAll("[data-run-id]")) card.addEventListener("click", () => { showView("history"); selectRun(card.dataset.runId); });
@@ -829,7 +829,7 @@
         ["discarded", "丢弃", "该任务没有丢弃记录。"]
       ];
       $("runDetail").innerHTML = [
-        '<div class="detail-heading"><div><h2>' + escapeHTML(detail.id) + '</h2><div class="detail-summary"><span class="chip">SSO ' + (detail.sso_count || 0) + '</span><span class="chip">grok2api ' + (detail.grok2api_sso_count || 0) + '</span><span class="chip">CPA ' + (detail.cpa_count || 0) + '</span><span class="chip">' + formatSize(detail.total_size) + '</span></div></div></div>',
+        '<div class="detail-heading"><div><h2>' + escapeHTML(detail.id) + '</h2><div class="detail-summary"><span class="chip" title="accounts.txt 行数">账号 ' + (detail.sso_count || 0) + '</span><span class="chip" title="tokens.txt 非空行数">token 行 ' + (detail.grok2api_sso_count || 0) + '</span><span class="chip" title="CPA 目录 JSON 文件数">CPA 文件 ' + (detail.cpa_count || 0) + '</span><span class="chip">' + formatSize(detail.total_size) + '</span></div></div></div>',
         '<div class="detail-actions">',
         '<a class="download" href="' + escapeHTML(detail.download_url) + '">下载全部</a>',
         '<a class="download secondary" href="' + escapeHTML(detail.download_sso_url) + '">下载 SSO</a>',

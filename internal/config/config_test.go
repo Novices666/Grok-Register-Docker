@@ -3,8 +3,40 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
+
+func TestUpsertEnvKeyPreservesCommentsAndUnknownKeys(t *testing.T) {
+	in := "# header\nFOO=1\n# comment\nBAR=old\n"
+	out := UpsertEnvKey(in, "BAR", "new")
+	if !strings.Contains(out, "# header") || !strings.Contains(out, "FOO=1") || !strings.Contains(out, "# comment") {
+		t.Fatalf("lost preserved lines: %q", out)
+	}
+	if !strings.Contains(out, "BAR=new") {
+		t.Fatalf("BAR not updated: %q", out)
+	}
+}
+
+func TestLoadIgnoresTurnstileWorkersAndTarget(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.env")
+	body := "TURNSTILE_WORKERS=7\nTARGET=99\nGROK_TARGET=50\nOUTPUT_CPA_ENABLED=1\n"
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Upstream: workers/target are runtime-only; Load must not apply env values.
+	if cfg.TurnstileWorkers != 0 {
+		t.Fatalf("TurnstileWorkers = %d, want 0 (ignored from env)", cfg.TurnstileWorkers)
+	}
+	if cfg.Target != 0 {
+		t.Fatalf("Target = %d, want 0 (ignored from env)", cfg.Target)
+	}
+}
 
 func TestLoadUsesCurrentFlowControlDefaults(t *testing.T) {
 	cfg, err := Load(filepath.Join(t.TempDir(), "missing.env"))
