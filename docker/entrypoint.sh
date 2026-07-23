@@ -12,6 +12,10 @@ write_config() {
   if [ -f "${GROK_HOME}/config.env" ]; then
     return
   fi
+  local cpa_upload_name_template="${CPA_UPLOAD_NAME_TEMPLATE:-}"
+  if [ -z "${cpa_upload_name_template}" ]; then
+    cpa_upload_name_template='{email}'
+  fi
   cat > "${GROK_HOME}/config.env" <<EOF
 EMAIL_MODE=${EMAIL_MODE:-tempmail}
 EMAIL_DOMAIN=${EMAIL_DOMAIN:-}
@@ -59,7 +63,7 @@ CPA_MANAGEMENT_BASE=${CPA_MANAGEMENT_BASE:-http://host.docker.internal:8317/v0/m
 CPA_MANAGEMENT_KEY=${CPA_MANAGEMENT_KEY:-}
 CPA_UPLOAD_TIMEOUT_SEC=${CPA_UPLOAD_TIMEOUT_SEC:-30}
 CPA_UPLOAD_RETRIES=${CPA_UPLOAD_RETRIES:-2}
-CPA_UPLOAD_NAME_TEMPLATE=${CPA_UPLOAD_NAME_TEMPLATE:-{email}.json}
+CPA_UPLOAD_NAME_TEMPLATE=${cpa_upload_name_template}
 CPA_UPLOAD_VERIFY=${CPA_UPLOAD_VERIFY:-1}
 CPA_UPLOAD_MODE=${CPA_UPLOAD_MODE:-multipart}
 EOF

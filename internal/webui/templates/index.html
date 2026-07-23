@@ -3,880 +3,927 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
   <title>{{.Title}}</title>
   <style>
     :root {
       color-scheme: light;
-      --paper: #f6f7f2;
+      --canvas: #eef1f3;
       --surface: #ffffff;
-      --surface-2: #eef2ed;
-      --surface-3: #e3ebe6;
-      --ink: #17201b;
-      --muted: #66746b;
-      --faint: #8d9a91;
-      --line: #d2ddd5;
-      --line-2: #b8c8bf;
-      --green: #23624a;
-      --green-2: #dff1e7;
-      --cyan: #2d7186;
-      --amber: #a06f19;
-      --red: #b64b39;
-      --black: #111815;
-      --code: #dceee3;
-      --code-muted: #90a99a;
-      --shadow: 0 16px 36px rgba(24, 34, 28, .08);
+      --surface-soft: #f6f8f9;
+      --surface-raised: #fbfcfc;
+      --ink: #182127;
+      --ink-soft: #46545d;
+      --muted: #718089;
+      --line: #d6dde1;
+      --line-strong: #b9c4ca;
+      --teal: #167067;
+      --teal-soft: #e2f2ef;
+      --blue: #2e6387;
+      --blue-soft: #e7f0f6;
+      --amber: #9a6714;
+      --amber-soft: #fff2d9;
+      --red: #b43d36;
+      --red-soft: #fce9e7;
+      --graphite: #202a30;
+      --terminal: #151d21;
+      --terminal-ink: #d7e9e4;
+      --shadow: 0 8px 24px rgba(24, 33, 39, .07);
+      --radius: 6px;
     }
+
     * { box-sizing: border-box; }
-    html { min-width: 320px; }
+    html { min-width: 320px; background: var(--canvas); }
     body {
       margin: 0;
       color: var(--ink);
-      background:
-        linear-gradient(90deg, rgba(35,98,74,.055) 1px, transparent 1px),
-        linear-gradient(180deg, #fbfcf8 0, var(--paper) 520px);
-      background-size: 36px 36px, auto;
-      font: 14px/1.5 "Inter", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+      background: var(--canvas);
+      font: 14px/1.5 "Segoe UI", "Microsoft YaHei UI", system-ui, sans-serif;
       letter-spacing: 0;
     }
     button, input, select, textarea { font: inherit; letter-spacing: 0; }
-    button, .download {
+    button, a { -webkit-tap-highlight-color: transparent; }
+    button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, a:focus-visible {
+      outline: 3px solid rgba(46, 99, 135, .24);
+      outline-offset: 2px;
+    }
+    button {
       min-height: 36px;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      gap: 7px;
       border: 1px solid transparent;
-      border-radius: 7px;
-      padding: 8px 12px;
-      background: var(--green);
+      border-radius: var(--radius);
+      padding: 7px 12px;
+      background: var(--teal);
       color: #fff;
-      font-weight: 850;
-      text-decoration: none;
+      font-weight: 700;
       cursor: pointer;
       white-space: nowrap;
     }
-    button.secondary, .download.secondary { background: #fff; color: var(--ink); border-color: var(--line-2); }
-    button.ghost { background: transparent; color: var(--muted); border-color: var(--line); }
-    button.danger { background: var(--red); color: #fff; }
+    button:hover:not(:disabled) { filter: brightness(.96); }
     button:disabled { opacity: .46; cursor: not-allowed; }
+    button.secondary, .download.secondary { border-color: var(--line-strong); background: #fff; color: var(--ink); }
+    button.quiet { border-color: transparent; background: transparent; color: var(--ink-soft); }
+    button.danger { background: var(--red); color: #fff; }
     input, select, textarea {
       width: 100%;
-      min-height: 36px;
-      border: 1px solid var(--line-2);
-      border-radius: 7px;
+      min-height: 38px;
+      border: 1px solid var(--line-strong);
+      border-radius: var(--radius);
       background: #fff;
       color: var(--ink);
       padding: 8px 10px;
     }
-    textarea { min-height: 76px; resize: vertical; }
-    button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, a:focus-visible {
-      outline: 3px solid rgba(45,113,134,.22);
-      outline-offset: 2px;
-    }
-    .app {
-      width: min(1560px, 100%);
-      margin: 0 auto;
-      padding: 14px;
-      display: grid;
-      grid-template-columns: 232px minmax(0, 1fr);
-      gap: 12px;
-    }
-    .rail, .panel, .command, .card {
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      background: rgba(255,255,255,.94);
-      box-shadow: var(--shadow);
-    }
-    .rail {
+    textarea { min-height: 82px; resize: vertical; }
+    input:disabled, select:disabled, textarea:disabled { background: #edf1f3; color: var(--muted); cursor: not-allowed; }
+
+    .app-header {
       position: sticky;
-      top: 14px;
-      height: calc(100vh - 28px);
-      min-height: 680px;
+      top: 0;
+      z-index: 30;
+      border-bottom: 1px solid #344149;
+      background: var(--graphite);
+      color: #f5f8f9;
+    }
+    .header-inner {
+      width: min(1500px, 100%);
+      min-height: 62px;
+      margin: 0 auto;
+      padding: 0 18px;
       display: grid;
-      grid-template-rows: auto 1fr auto;
-      overflow: hidden;
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 24px;
     }
-    .brand {
-      padding: 16px;
-      border-bottom: 1px solid var(--line);
-      background: var(--black);
-      color: #f3fbf5;
-    }
-    .mark {
-      width: 38px;
-      height: 38px;
+    .brand { display: flex; align-items: center; gap: 11px; min-width: 220px; }
+    .brand-mark {
+      width: 34px;
+      height: 34px;
       display: grid;
       place-items: center;
-      border: 1px solid rgba(255,255,255,.22);
-      border-radius: 8px;
-      color: #bfe8d0;
-      font: 900 16px/1 "Cascadia Code", Consolas, monospace;
-      margin-bottom: 16px;
+      border: 1px solid #56656d;
+      border-radius: 5px;
+      color: #9fe0d5;
+      font: 800 13px/1 "Cascadia Mono", Consolas, monospace;
     }
-    .eyebrow {
-      color: var(--cyan);
-      font: 850 11px/1.1 "Cascadia Code", Consolas, monospace;
-      text-transform: uppercase;
-      letter-spacing: .08em;
+    .brand-name {
+      font-family: Bahnschrift, "Segoe UI", sans-serif;
+      font-size: 18px;
+      font-weight: 700;
+      line-height: 1.05;
     }
-    .brand .eyebrow { color: #9bd8c2; }
-    h1 {
-      margin: 7px 0 0;
-      font-size: 30px;
-      line-height: 1;
-      letter-spacing: 0;
-    }
-    h2, h3 { margin: 0; line-height: 1.15; }
-    h2 { font-size: 15px; }
-    h3 { font-size: 13px; }
-    .rail-nav {
-      padding: 10px;
-      display: grid;
-      align-content: start;
-      gap: 6px;
-      background: #fbfcf8;
-    }
+    .brand-sub { margin-top: 2px; color: #aab6bc; font-size: 11px; }
+    .primary-nav { display: flex; align-self: stretch; justify-content: center; gap: 3px; }
     .nav-button {
-      width: 100%;
-      justify-content: flex-start;
+      min-width: 92px;
+      height: 100%;
+      border: 0;
+      border-radius: 0;
+      border-bottom: 3px solid transparent;
       background: transparent;
-      color: var(--muted);
-      border-color: transparent;
+      color: #bac5ca;
+      font-weight: 650;
     }
-    .nav-button.active {
-      background: var(--green-2);
-      color: var(--green);
-      border-color: #c5e3d2;
-    }
-    .rail-foot {
-      padding: 12px;
-      border-top: 1px solid var(--line);
-      background: var(--surface-2);
-      color: var(--muted);
-      font-size: 12px;
-    }
-    .main { display: grid; gap: 12px; min-width: 0; }
-    .command {
+    .nav-button.active { border-bottom-color: #73cabe; color: #fff; background: #263239; }
+    .header-state { display: flex; align-items: center; gap: 8px; color: #c2ccd1; font-size: 12px; }
+    .state-dot { width: 8px; height: 8px; border-radius: 50%; background: #85939a; }
+    .state-dot.running { background: #55c4a5; box-shadow: 0 0 0 4px rgba(85, 196, 165, .15); }
+    .state-dot.error { background: #ef746a; box-shadow: 0 0 0 4px rgba(239, 116, 106, .14); }
+
+    .shell { width: min(1500px, 100%); margin: 0 auto; padding: 14px 18px 28px; }
+    .run-dock {
       display: grid;
-      grid-template-columns: minmax(0, 1fr) minmax(420px, auto);
-      gap: 0;
+      grid-template-columns: minmax(280px, .9fr) minmax(430px, 1.45fr) minmax(340px, .95fr);
+      border: 1px solid var(--line-strong);
+      border-radius: var(--radius);
+      background: var(--surface);
+      box-shadow: var(--shadow);
       overflow: hidden;
     }
-    .status-block {
-      padding: 16px;
-      display: grid;
-      gap: 12px;
-      background: linear-gradient(180deg, #fff 0, #f3f7f2 100%);
+    .run-identity, .run-metrics, .run-controls { min-width: 0; padding: 14px 16px; }
+    .run-identity, .run-metrics { border-right: 1px solid var(--line); }
+    .run-identity { display: grid; align-content: center; gap: 7px; }
+    .section-label {
+      color: var(--muted);
+      font: 700 11px/1.2 "Cascadia Mono", Consolas, monospace;
+      text-transform: uppercase;
     }
-    .status-line {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-    }
-    .status-pill {
+    .run-line { display: flex; align-items: center; gap: 10px; min-width: 0; }
+    .status-badge {
       display: inline-flex;
-      min-height: 30px;
+      min-height: 28px;
       align-items: center;
-      padding: 6px 12px;
+      border: 1px solid var(--line-strong);
       border-radius: 999px;
-      border: 1px solid var(--line-2);
-      background: #fff;
-      color: var(--muted);
-      font-weight: 850;
+      padding: 4px 10px;
+      background: var(--surface-soft);
+      color: var(--ink-soft);
+      font-weight: 750;
     }
-    .status-pill.running { color: var(--green); border-color: #acd8bf; background: var(--green-2); }
-    .status-pill.error { color: var(--red); border-color: #e7b1a6; background: #fff0ed; }
-    .phase-line {
-      min-height: 22px;
-      margin: 0;
-      color: var(--muted);
-      overflow-wrap: anywhere;
-    }
-    .metric-strip {
-      display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      overflow: hidden;
-      background: #fff;
-    }
-    .metric {
-      min-height: 84px;
-      padding: 12px;
-      border-right: 1px solid var(--line);
-    }
-    .metric:last-child { border-right: 0; }
-    .metric strong { display: block; font-size: 34px; line-height: 1; }
-    .metric span { display: block; margin-top: 7px; color: var(--muted); font-size: 12px; font-weight: 850; }
-    .launch {
-      padding: 16px;
-      border-left: 1px solid var(--line);
-      background: var(--black);
-      color: #eff8f1;
-      display: grid;
-      gap: 12px;
-      align-content: center;
-    }
-    .target-form { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 0; }
-    .target-form label { display: grid; gap: 5px; color: #c3d3c8; font-size: 12px; font-weight: 850; }
-    .target-form .wide { grid-column: span 2; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-    .toast { min-height: 20px; margin: 0; color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }
-    .launch .toast { color: #b6c8bd; }
-    .workspace { display: grid; grid-template-columns: minmax(0, 1.22fr) minmax(390px, .78fr); gap: 12px; align-items: start; }
-    .panel { overflow: hidden; }
+    .status-badge.running { border-color: #9dd1c5; background: var(--teal-soft); color: var(--teal); }
+    .status-badge.error { border-color: #e9afa9; background: var(--red-soft); color: var(--red); }
+    .run-id { overflow: hidden; color: var(--ink-soft); font: 12px/1.4 "Cascadia Mono", Consolas, monospace; text-overflow: ellipsis; white-space: nowrap; }
+    .phase { margin: 0; color: var(--ink-soft); overflow-wrap: anywhere; }
+    .progress-track { height: 5px; overflow: hidden; border-radius: 3px; background: #dfe5e8; }
+    .progress-fill { width: 0; height: 100%; background: var(--teal); transition: width .25s ease; }
+    .run-metrics { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); align-items: center; }
+    .metric { min-width: 0; padding: 0 12px; border-right: 1px solid var(--line); }
+    .metric:first-child { padding-left: 0; }
+    .metric:last-child { padding-right: 0; border-right: 0; }
+    .metric-value { display: block; font-family: Bahnschrift, "Segoe UI", sans-serif; font-size: 25px; font-weight: 700; line-height: 1; }
+    .metric-label { display: block; margin-top: 5px; color: var(--muted); font-size: 11px; }
+    .run-controls { display: grid; grid-template-columns: minmax(84px, 1fr) minmax(84px, 1fr) auto auto; align-items: end; gap: 8px; }
+    .compact-field { display: grid; gap: 4px; color: var(--muted); font-size: 11px; font-weight: 650; }
+    .run-message { grid-column: 1 / -1; min-height: 18px; color: var(--ink-soft); font-size: 12px; overflow-wrap: anywhere; }
+    .run-message.error { color: var(--red); }
+
+    .view { display: none; margin-top: 14px; }
+    .view.active { display: block; }
+    .overview-grid { display: grid; grid-template-columns: minmax(0, 1.65fr) minmax(320px, .75fr); gap: 14px; align-items: start; }
+    .side-stack { display: grid; gap: 14px; }
+    .panel { border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow); overflow: hidden; }
     .panel-head {
-      min-height: 52px;
+      min-height: 50px;
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 10px;
-      padding: 12px 14px;
+      gap: 12px;
+      padding: 11px 14px;
       border-bottom: 1px solid var(--line);
-      background: #fff;
+      background: var(--surface-raised);
     }
-    .panel-head .meta { color: var(--muted); font-size: 12px; font-weight: 800; overflow-wrap: anywhere; }
-    .log-wrap { background: var(--black); }
+    .panel-title { margin: 0; font: 700 15px/1.2 Bahnschrift, "Segoe UI", sans-serif; }
+    .panel-meta { min-width: 0; overflow: hidden; color: var(--muted); font: 11px/1.4 "Cascadia Mono", Consolas, monospace; text-overflow: ellipsis; white-space: nowrap; }
+    .terminal { background: var(--terminal); }
     pre {
+      min-height: 610px;
+      max-height: calc(100vh - 260px);
       margin: 0;
-      min-height: 560px;
-      max-height: 68vh;
       overflow: auto;
-      padding: 14px;
-      color: var(--code);
-      font: 12px/1.58 "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+      padding: 15px;
+      color: var(--terminal-ink);
+      font: 12px/1.62 "Cascadia Mono", "SFMono-Regular", Consolas, monospace;
       white-space: pre-wrap;
       overflow-wrap: anywhere;
     }
-    .side { display: grid; gap: 12px; min-width: 0; }
-    .summary-grid {
+    .pipeline { padding: 6px 14px 10px; }
+    .stage {
+      position: relative;
       display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-      gap: 8px;
-      padding: 12px;
-      background: var(--surface-2);
+      grid-template-columns: 28px minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 9px;
+      min-height: 55px;
     }
-    .summary-item {
-      min-height: 70px;
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      padding: 10px;
+    .stage:not(:last-child)::after { content: ""; position: absolute; left: 13px; top: 38px; bottom: -17px; width: 2px; background: var(--line); }
+    .stage-node {
+      position: relative;
+      z-index: 1;
+      width: 28px;
+      height: 28px;
+      display: grid;
+      place-items: center;
+      border: 2px solid var(--line-strong);
+      border-radius: 50%;
       background: #fff;
+      color: var(--muted);
+      font: 700 10px/1 "Cascadia Mono", Consolas, monospace;
     }
-    .summary-item b { display: block; font-size: 18px; }
-    .summary-item span { display: block; margin-top: 4px; color: var(--muted); font-size: 12px; font-weight: 850; }
-    .view { display: none; }
-    .view.active { display: grid; gap: 12px; }
-    .history-tools {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) auto;
-      gap: 10px;
-      padding: 12px;
-      border-bottom: 1px solid var(--line);
-      background: var(--surface-2);
-    }
-    .history-layout { display: grid; grid-template-columns: 330px minmax(0, 1fr); gap: 0; }
-    .run-list {
-      max-height: 760px;
-      overflow: auto;
-      border-right: 1px solid var(--line);
-      background: #fbfcf8;
-      padding: 10px;
-      display: grid;
-      align-content: start;
-      gap: 8px;
-    }
+    .stage.active .stage-node { border-color: var(--teal); background: var(--teal-soft); color: var(--teal); }
+    .stage.skipped .stage-node { border-style: dashed; background: var(--surface-soft); }
+    .stage-copy b { display: block; font-size: 13px; }
+    .stage-copy span { display: block; margin-top: 1px; color: var(--muted); font-size: 11px; }
+    .stage-state { color: var(--muted); font-size: 11px; font-weight: 700; }
+    .stage.active .stage-state { color: var(--teal); }
+    .stage.skipped .stage-state { color: var(--amber); }
+    .recent-list, .run-list { display: grid; align-content: start; }
+    .recent-list .run-card { border-bottom: 1px solid var(--line); }
+    .recent-list .run-card:last-child { border-bottom: 0; }
     .run-card {
       width: 100%;
-      min-height: 104px;
+      min-height: 78px;
       display: grid;
-      align-content: space-between;
-      gap: 8px;
-      text-align: left;
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      padding: 10px;
+      gap: 7px;
+      border: 0;
+      border-radius: 0;
       background: #fff;
       color: var(--ink);
-      cursor: pointer;
+      padding: 11px 13px;
+      text-align: left;
     }
-    .run-card.active { border-color: var(--green); box-shadow: 0 0 0 3px rgba(35,98,74,.12); }
-    .run-title { display: flex; justify-content: space-between; gap: 8px; font-family: "Cascadia Code", Consolas, monospace; font-size: 12px; overflow-wrap: anywhere; }
-    .chips { display: flex; flex-wrap: wrap; gap: 6px; }
-    .chip {
-      border: 1px solid var(--line);
-      border-radius: 999px;
-      padding: 2px 7px;
-      background: var(--surface-2);
-      color: var(--muted);
-      font-size: 11px;
-      font-weight: 850;
-    }
-    .run-detail { min-width: 0; display: grid; gap: 12px; padding: 12px; }
-    .detail-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+    .run-card:hover { background: var(--surface-soft); }
+    .run-card.active { box-shadow: inset 3px 0 0 var(--teal); background: var(--teal-soft); }
+    .run-card-top { display: flex; justify-content: space-between; gap: 8px; }
+    .run-card-id { font: 700 12px/1.4 "Cascadia Mono", Consolas, monospace; overflow-wrap: anywhere; }
+    .run-card-date { color: var(--muted); font-size: 11px; white-space: nowrap; }
+    .chips { display: flex; flex-wrap: wrap; gap: 5px; }
+    .chip { border: 1px solid var(--line); border-radius: 3px; padding: 2px 6px; background: var(--surface-soft); color: var(--ink-soft); font-size: 10px; font-weight: 700; }
+    .empty { padding: 18px; color: var(--muted); font-size: 13px; }
+
+    .history-panel { min-height: 680px; }
+    .history-tools { display: flex; align-items: center; gap: 8px; }
+    .history-tools input { min-width: 260px; }
+    .history-layout { display: grid; grid-template-columns: 340px minmax(0, 1fr); min-height: 628px; }
+    .history-layout > .run-list { max-height: 760px; overflow: auto; border-right: 1px solid var(--line); background: var(--surface-soft); }
+    .history-layout > .run-list .run-card { border-bottom: 1px solid var(--line); }
+    .run-detail { min-width: 0; display: grid; align-content: start; gap: 13px; padding: 14px; }
+    .detail-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+    .detail-heading h2 { margin: 0; font: 700 19px/1.2 Bahnschrift, "Segoe UI", sans-serif; overflow-wrap: anywhere; }
+    .detail-summary { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 7px; }
+    .detail-actions { display: flex; flex-wrap: wrap; gap: 7px; }
+    .download { min-height: 36px; display: inline-flex; align-items: center; justify-content: center; border: 1px solid transparent; border-radius: var(--radius); padding: 7px 11px; background: var(--teal); color: #fff; font-weight: 700; text-decoration: none; white-space: nowrap; }
     .file-groups { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
-    .file-group { border: 1px solid var(--line); border-radius: 8px; background: #fff; overflow: hidden; }
-    .file-group header {
+    .file-group { border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+    .file-group header { display: flex; justify-content: space-between; gap: 8px; padding: 8px 10px; border-bottom: 1px solid var(--line); background: var(--surface-soft); }
+    .file-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; padding: 7px 10px; border-bottom: 1px solid var(--line); }
+    .file-row:last-child { border-bottom: 0; }
+    .file-name { overflow-wrap: anywhere; font: 11px/1.45 "Cascadia Mono", Consolas, monospace; }
+    .muted { color: var(--muted); }
+    .history-log { border: 1px solid #2e3a40; border-radius: var(--radius); overflow: hidden; background: var(--terminal); }
+    .history-log .panel-head { border-bottom-color: #324047; background: var(--terminal); color: #eef7f5; }
+    .history-log pre { min-height: 250px; max-height: 390px; }
+
+    .settings-shell { display: grid; grid-template-columns: 250px minmax(0, 1fr); min-height: 700px; }
+    .settings-nav { border-right: 1px solid var(--line); background: var(--surface-soft); }
+    .settings-search { padding: 12px; border-bottom: 1px solid var(--line); }
+    .settings-tabs { display: grid; padding: 7px; }
+    .settings-tab {
+      min-height: 42px;
       display: flex;
       align-items: center;
       justify-content: space-between;
       gap: 8px;
-      padding: 9px 10px;
-      border-bottom: 1px solid var(--line);
-      background: var(--surface-2);
+      border: 0;
+      background: transparent;
+      color: var(--ink-soft);
+      text-align: left;
     }
-    .file-row {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) auto;
-      gap: 8px;
-      padding: 8px 10px;
-      border-bottom: 1px solid var(--line);
-    }
-    .file-row:last-child { border-bottom: 0; }
-    .file-name { overflow-wrap: anywhere; font-family: "Cascadia Code", Consolas, monospace; font-size: 12px; }
-    .empty { padding: 12px; color: var(--muted); font-size: 13px; }
-    .history-log { border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--black); }
-    .history-log .panel-head { background: #17201b; color: #eef6ef; border-bottom-color: #26322a; }
-    .history-log pre { min-height: 260px; max-height: 420px; }
-    .config-page {
-      padding: 12px;
-      display: grid;
-      gap: 12px;
-    }
-    .config-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
-    details { border: 1px solid var(--line); border-radius: 8px; background: #fff; overflow: hidden; }
-    summary {
-      cursor: pointer;
-      padding: 10px 12px;
-      font-weight: 850;
-      list-style: none;
-      border-bottom: 1px solid transparent;
-      background: #fff;
-    }
-    details[open] summary { border-bottom-color: var(--line); background: var(--surface-2); }
-    summary::-webkit-details-marker { display: none; }
-    .detail-body { display: grid; gap: 10px; padding: 12px; }
-    .field { display: grid; gap: 5px; }
-    .field label { color: var(--muted); font-size: 12px; font-weight: 850; }
-    .field-hint, .note { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.45; }
-    .dependency-note {
-      margin: 0;
-      padding: 9px 10px;
-      border: 1px solid var(--line);
-      border-radius: 7px;
-      background: var(--surface-2);
-      color: var(--muted);
-      font-size: 12px;
-    }
-    .field[data-disabled="true"] { opacity: .55; }
-    .actions { display: flex; flex-wrap: wrap; gap: 8px; }
-    .muted { color: var(--muted); }
+    .settings-tab.active { background: #fff; color: var(--teal); box-shadow: inset 3px 0 0 var(--teal); }
+    .settings-tab-count { color: var(--muted); font: 11px/1 "Cascadia Mono", Consolas, monospace; }
+    .settings-main { min-width: 0; display: grid; grid-template-rows: auto 1fr auto; }
+    .settings-head { min-height: 74px; padding: 14px 18px; border-bottom: 1px solid var(--line); }
+    .settings-head h2 { margin: 0; font: 700 20px/1.2 Bahnschrift, "Segoe UI", sans-serif; }
+    .settings-head p { margin: 4px 0 0; color: var(--muted); }
+    .config-sections { padding: 5px 18px 18px; }
+    .config-group { display: none; }
+    .config-group.active { display: block; }
+    .config-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 20px; }
+    .config-field { min-width: 0; display: grid; align-content: start; gap: 6px; padding: 15px 0; border-bottom: 1px solid var(--line); }
+    .config-field.wide { grid-column: 1 / -1; }
+    .config-field.hidden-by-search { display: none; }
+    .config-field[data-disabled="true"] { opacity: .58; }
+    .field-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+    .field-heading label { font-weight: 700; }
+    .config-key { color: var(--muted); font: 10px/1.3 "Cascadia Mono", Consolas, monospace; overflow-wrap: anywhere; text-align: right; }
+    .field-note { min-height: 18px; margin: 0; color: var(--muted); font-size: 11px; }
+    .switch-row { min-height: 38px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .switch-copy { color: var(--ink-soft); font-size: 12px; }
+    .switch { position: relative; width: 42px; height: 24px; flex: 0 0 auto; }
+    .switch input { position: absolute; opacity: 0; pointer-events: none; }
+    .switch-track { position: absolute; inset: 0; border: 1px solid var(--line-strong); border-radius: 12px; background: #dfe5e8; transition: .15s ease; cursor: pointer; }
+    .switch-track::after { content: ""; position: absolute; width: 18px; height: 18px; left: 2px; top: 2px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(24,33,39,.24); transition: .15s ease; }
+    .switch input:checked + .switch-track { border-color: var(--teal); background: var(--teal); }
+    .switch input:checked + .switch-track::after { transform: translateX(18px); }
+    .switch input:focus-visible + .switch-track { outline: 3px solid rgba(46,99,135,.24); outline-offset: 2px; }
+    .password-wrap { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 7px; }
+    .settings-footer { position: sticky; bottom: 0; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 11px 18px; border-top: 1px solid var(--line); background: rgba(255,255,255,.96); }
+    .save-state { color: var(--muted); font-size: 12px; }
+    .save-state.dirty { color: var(--amber); font-weight: 700; }
+    .save-state.error { color: var(--red); }
+    .settings-actions { display: flex; gap: 8px; }
+    .dependency-strip { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 10px; }
+    .dependency-item { border: 1px solid var(--line); border-radius: 4px; padding: 4px 7px; background: var(--surface-soft); color: var(--muted); font-size: 11px; }
+    .dependency-item.on { border-color: #a9d6cb; background: var(--teal-soft); color: var(--teal); }
+    .dependency-item.blocked { border-color: #e4c78e; background: var(--amber-soft); color: var(--amber); }
+    .no-results { display: none; padding: 34px 18px; color: var(--muted); text-align: center; }
+
     @media (max-width: 1180px) {
-      .app { grid-template-columns: 1fr; }
-      .rail { position: static; height: auto; min-height: 0; }
-      .rail-nav { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-      .rail-foot { display: none; }
-      .command, .workspace, .history-layout { grid-template-columns: 1fr; }
-      .launch { border-left: 0; border-top: 1px solid var(--line); }
-      .run-list { border-right: 0; border-bottom: 1px solid var(--line); max-height: 360px; }
+      .run-dock { grid-template-columns: minmax(250px, .8fr) minmax(410px, 1.2fr); }
+      .run-controls { grid-column: 1 / -1; border-top: 1px solid var(--line); }
+      .run-identity { border-right: 1px solid var(--line); }
+      .run-metrics { border-right: 0; }
+      .overview-grid { grid-template-columns: minmax(0, 1.35fr) minmax(300px, .75fr); }
     }
-    @media (max-width: 720px) {
-      .app { padding: 10px; }
-      .rail-nav, .target-form, .target-form .wide, .metric-strip, .summary-grid, .file-groups, .config-grid, .history-tools { grid-template-columns: 1fr; }
-      pre { min-height: 380px; }
-      .metric { border-right: 0; border-bottom: 1px solid var(--line); }
-      .metric:last-child { border-bottom: 0; }
+    @media (max-width: 860px) {
+      .header-inner { grid-template-columns: 1fr auto; gap: 10px; }
+      .primary-nav { grid-column: 1 / -1; grid-row: 2; order: 3; justify-content: stretch; height: 44px; margin: 0 -18px; border-top: 1px solid #344149; }
+      .nav-button { flex: 1; min-width: 0; }
+      .header-state { justify-self: end; }
+      .run-dock, .overview-grid, .history-layout, .settings-shell { grid-template-columns: 1fr; }
+      .run-identity, .run-metrics { border-right: 0; }
+      .run-identity { border-bottom: 1px solid var(--line); }
+      .run-controls { grid-column: auto; }
+      .history-layout > .run-list { max-height: 310px; border-right: 0; border-bottom: 1px solid var(--line); }
+      .settings-nav { border-right: 0; border-bottom: 1px solid var(--line); }
+      .settings-tabs { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .settings-tab { justify-content: center; }
+      .settings-tab-count { display: none; }
+      pre { min-height: 440px; max-height: 64vh; }
+    }
+    @media (max-width: 620px) {
+      .shell { padding: 10px 10px 22px; }
+      .header-inner { padding: 0 12px; }
+      .primary-nav { margin: 0 -12px; }
+      .brand-sub { display: none; }
+      .header-state span:last-child { display: none; }
+      .run-metrics { grid-template-columns: repeat(5, minmax(58px, 1fr)); overflow-x: auto; }
+      .metric { padding: 0 8px; }
+      .metric-value { font-size: 21px; }
+      .run-controls { grid-template-columns: 1fr 1fr; }
+      .history-tools { width: 100%; }
+      .history-tools input { min-width: 0; }
+      .panel-head { align-items: flex-start; }
+      .file-groups, .config-fields { grid-template-columns: 1fr; }
+      .config-field.wide { grid-column: auto; }
+      .settings-tabs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .settings-head, .config-sections, .settings-footer { padding-left: 12px; padding-right: 12px; }
+      .settings-footer { align-items: flex-start; flex-direction: column; }
+      .settings-actions { width: 100%; }
+      .settings-actions button { flex: 1; }
+      .detail-heading { display: grid; }
+      pre { min-height: 360px; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; }
     }
   </style>
 </head>
 <body>
-  <div class="app">
-    <aside class="rail">
+  <header class="app-header">
+    <div class="header-inner">
       <div class="brand">
-        <div class="mark">GR</div>
-        <div class="eyebrow">register console</div>
-        <h1>Grok Register</h1>
+        <div class="brand-mark">GR</div>
+        <div><div class="brand-name">Grok Register</div><div class="brand-sub">本地注册流水线</div></div>
       </div>
-      <nav class="rail-nav" aria-label="主导航">
-        <button type="button" class="nav-button active" data-view="live">实时</button>
-        <button type="button" class="nav-button" data-view="history">历史</button>
-        <button type="button" class="nav-button" data-view="flow">流程</button>
-        <button type="button" class="nav-button" data-view="mail">邮箱代理</button>
-        <button type="button" class="nav-button" data-view="cpa">CPA 上传</button>
+      <nav class="primary-nav" aria-label="主导航">
+        <button type="button" class="nav-button active" data-view="overview">运行台</button>
+        <button type="button" class="nav-button" data-view="history">历史记录</button>
+        <button type="button" class="nav-button" data-view="settings">配置</button>
       </nav>
-      <div class="rail-foot">
-        <div>本地控制台</div>
-        <div id="railStatus">状态读取中</div>
+      <div class="header-state"><i id="headerDot" class="state-dot"></i><span id="headerStatus">读取状态</span></div>
+    </div>
+  </header>
+
+  <main class="shell">
+    <section class="run-dock" aria-label="任务控制">
+      <div class="run-identity">
+        <div class="section-label">Current run</div>
+        <div class="run-line"><span id="statusBadge" class="status-badge">读取中</span><span id="runID" class="run-id">尚无运行记录</span></div>
+        <p id="phase" class="phase">正在读取当前状态。</p>
+        <div class="progress-track" aria-label="任务进度"><div id="progressFill" class="progress-fill"></div></div>
       </div>
-    </aside>
+      <div class="run-metrics">
+        <div class="metric"><strong id="done" class="metric-value">0</strong><span class="metric-label">成功</span></div>
+        <div class="metric"><strong id="target" class="metric-value">0</strong><span class="metric-label">目标</span></div>
+        <div class="metric"><strong id="oauth" class="metric-value">0</strong><span class="metric-label">OAuth</span></div>
+        <div class="metric"><strong id="fail" class="metric-value">0</strong><span class="metric-label">失败</span></div>
+        <div class="metric"><strong id="rate" class="metric-value">0</strong><span class="metric-label">每分钟</span></div>
+      </div>
+      <form id="controlForm" class="run-controls">
+        <label class="compact-field">目标数量<input id="targetInput" type="number" min="1" max="10000" value="10" required></label>
+        <label class="compact-field">并发线程<input id="threadInput" type="number" min="1" max="8" value="2" required></label>
+        <button id="startButton" type="submit">启动任务</button>
+        <button id="stopButton" type="button" class="danger">停止</button>
+        <div id="runMessage" class="run-message" role="status"></div>
+      </form>
+    </section>
 
-    <main class="main">
-      <section class="command">
-        <div class="status-block">
-          <div class="status-line">
-            <div>
-              <div class="eyebrow">current run</div>
-              <h2>运行概览</h2>
-            </div>
-            <span id="statusPill" class="status-pill">读取中</span>
-          </div>
-          <p class="phase-line" id="phase">当前状态会自动刷新。</p>
-          <div class="metric-strip">
-            <div class="metric"><strong id="done">0</strong><span>已成功</span></div>
-            <div class="metric"><strong id="target">0</strong><span>目标</span></div>
-            <div class="metric"><strong id="oauth">0</strong><span>OAuth</span></div>
-            <div class="metric"><strong id="fail">0</strong><span>失败</span></div>
-          </div>
-        </div>
-        <div class="launch">
-          <div>
-            <div class="eyebrow">launch</div>
-            <h2>启动任务</h2>
-          </div>
-          <form id="controlForm" class="target-form">
-            <label>目标数量<input id="targetInput" type="number" min="1" max="10000" value="10"></label>
-            <label>并发线程<input id="threadInput" type="number" min="1" max="8" value="2"></label>
-            <div class="wide">
-              <button type="submit">启动</button>
-              <button type="button" class="danger" id="stopButton">停止</button>
-            </div>
-          </form>
-          <p class="toast" id="toast"></p>
-        </div>
-      </section>
-
-      <section id="view-live" class="view active">
-        <div class="workspace">
-          <section class="panel">
-            <div class="panel-head">
-              <h2>实时日志</h2>
-              <span class="meta" id="logPath">latest run</span>
-            </div>
-            <div class="log-wrap"><pre id="logs">读取日志中...</pre></div>
-          </section>
-          <aside class="side">
-            <section class="panel">
-              <div class="panel-head"><h2>输出链路</h2><span class="meta">当前生效</span></div>
-              <div class="summary-grid">
-                <div class="summary-item"><b id="summarySSO">-</b><span>SSO 输出</span></div>
-                <div class="summary-item"><b id="summaryGrok2API">-</b><span>grok2api SSO</span></div>
-                <div class="summary-item"><b id="summaryCPA">-</b><span>CPA 输出</span></div>
-                <div class="summary-item"><b id="summaryUpload">-</b><span>CPA 上传</span></div>
-              </div>
-            </section>
-            <section class="panel">
-              <div class="panel-head"><h2>最近历史</h2><button type="button" class="secondary nav-jump" data-view="history">查看全部</button></div>
-              <div class="run-list" id="recentRuns"><div class="empty">读取中</div></div>
-            </section>
-          </aside>
-        </div>
-      </section>
-
-      <section id="view-history" class="view">
+    <section id="view-overview" class="view active">
+      <div class="overview-grid">
         <section class="panel">
-          <div class="panel-head"><h2>历史</h2><span class="meta">历史记录包含输出文件和对应日志</span></div>
-          <div class="history-tools">
-            <input id="historySearch" placeholder="搜索 run、文件类型或日志状态">
-            <button type="button" class="secondary" id="refreshHistory">刷新</button>
-          </div>
-          <div class="history-layout">
-            <div class="run-list" id="runs"><div class="empty">读取中</div></div>
-            <div class="run-detail" id="runDetail">
-              <div class="empty">选择一个 run 查看输出文件和历史日志。</div>
-            </div>
-          </div>
+          <div class="panel-head"><h1 class="panel-title">实时日志</h1><span id="logPath" class="panel-meta">等待日志</span></div>
+          <div class="terminal"><pre id="logs">读取日志中...</pre></div>
         </section>
-      </section>
+        <aside class="side-stack">
+          <section class="panel">
+            <div class="panel-head"><h2 class="panel-title">产出流程</h2><span class="panel-meta">按当前配置</span></div>
+            <div id="pipeline" class="pipeline"></div>
+          </section>
+          <section class="panel">
+            <div class="panel-head"><h2 class="panel-title">最近任务</h2><button type="button" class="quiet nav-jump" data-view="history">全部记录</button></div>
+            <div id="recentRuns" class="recent-list"><div class="empty">读取中</div></div>
+          </section>
+        </aside>
+      </div>
+    </section>
 
-      <section id="view-flow" class="view">
-        <section class="panel config-page">
-          <div class="panel-head"><h2>流程控制</h2><span class="meta">输出、并发、延迟</span></div>
-          <div class="config-grid">
-            <details open><summary>输出文件</summary><div class="detail-body">
-              <p class="dependency-note" id="flowSummary">输出和后续链路会按开关联动。</p>
-              <div class="field" id="field_OUTPUT_SSO_ENABLED"><label for="OUTPUT_SSO_ENABLED">SSO 文件输出</label><select id="OUTPUT_SSO_ENABLED"><option value="1">开启</option><option value="0">关闭</option></select><p class="field-hint">写入 accounts.txt 和 auth-sessions.jsonl。</p></div>
-              <div class="field" id="field_OUTPUT_GROK2API_SSO_ENABLED"><label for="OUTPUT_GROK2API_SSO_ENABLED">grok2api SSO 文件</label><select id="OUTPUT_GROK2API_SSO_ENABLED"><option value="1">开启</option><option value="0">关闭</option></select><p class="field-hint">写入 grok2api/tokens.txt，每行一个裸 SSO；依赖 SSO 文件输出。</p></div>
-              <div class="field" id="field_OUTPUT_CPA_ENABLED"><label for="OUTPUT_CPA_ENABLED">CPA 文件输出</label><select id="OUTPUT_CPA_ENABLED"><option value="1">开启</option><option value="0">关闭</option></select><p class="field-hint">开启后才会进入 OAuth、CPA 探活和 CPA 文件链路。</p></div>
-            </div></details>
-            <details open><summary>并发与延迟</summary><div class="detail-body">
-              <div class="field"><label for="HTTP_POOL_SIZE">HTTP 并发池</label><input id="HTTP_POOL_SIZE" type="number" min="1" step="1"></div>
-              <div class="field"><label for="PHYSICAL_CAP">物理并发上限</label><input id="PHYSICAL_CAP" type="number" min="0" step="1"></div>
-              <div class="field"><label for="TURNSTILE_WORKERS">Turnstile 线程</label><input id="TURNSTILE_WORKERS" type="number" min="1" max="8" step="1"></div>
-              <div class="field"><label for="TURNSTILE_MODE">Turnstile 模式</label><select id="TURNSTILE_MODE"><option value="offscreen">offscreen</option><option value="headless">headless</option><option value="auto">auto</option></select></div>
-              <div class="field"><label for="TURNSTILE_PROVIDER">Turnstile provider</label><input id="TURNSTILE_PROVIDER"></div>
-              <div class="field"><label for="LITE_SOLVER_URL">Lite solver URL</label><input id="LITE_SOLVER_URL"></div>
-              <div class="field"><label for="TEMPMAIL_LOL_RETRIES">邮箱轮询次数</label><input id="TEMPMAIL_LOL_RETRIES" type="number" min="1" step="1"></div>
-              <div class="field"><label for="TEMPMAIL_LOL_MIN_INTERVAL_MS">邮箱轮询间隔 ms</label><input id="TEMPMAIL_LOL_MIN_INTERVAL_MS" type="number" min="100" step="100"></div>
-              <div class="field"><label for="OAUTH_MIN_INTERVAL_SEC">OAuth 间隔秒</label><input id="OAUTH_MIN_INTERVAL_SEC" type="number" min="0" step="0.5"></div>
-              <div class="field"><label for="OAUTH_RETRY_SEC">OAuth 重试秒</label><input id="OAUTH_RETRY_SEC" type="number" min="0" step="0.5"></div>
-              <div class="field"><label for="OAUTH_WORKERS">OAuth workers</label><input id="OAUTH_WORKERS" type="number" min="0" max="4" step="1"><p class="field-hint">0=自动；高并发时建议 1，避免 rate_limited。</p></div>
-              <div class="field"><label for="PROBE_ENABLED">CPA 探活</label><select id="PROBE_ENABLED"><option value="1">开启</option><option value="0">关闭</option></select></div>
-              <div class="field"><label for="PROBE_WARMUP_SEC">探活预热秒</label><input id="PROBE_WARMUP_SEC" type="number" min="0" step="0.1"></div>
-            </div></details>
-          </div>
-          <div class="actions"><button type="button" id="saveFlow">保存配置</button></div>
-          <p class="toast" id="flowToast"></p>
-        </section>
+    <section id="view-history" class="view">
+      <section class="panel history-panel">
+        <div class="panel-head">
+          <div><h1 class="panel-title">历史记录</h1><span class="panel-meta">历史记录包含输出文件和对应日志</span></div>
+          <div class="history-tools"><input id="historySearch" type="search" placeholder="搜索 run 或输出类型"><button id="refreshHistory" type="button" class="secondary">刷新</button></div>
+        </div>
+        <div class="history-layout">
+          <div id="runs" class="run-list"><div class="empty">读取中</div></div>
+          <div id="runDetail" class="run-detail"><div class="empty">选择一条记录查看输出文件和历史日志。</div></div>
+        </div>
       </section>
+    </section>
 
-      <section id="view-mail" class="view">
-        <section class="panel config-page">
-          <div class="panel-head"><h2>邮箱代理</h2><span class="meta">邮箱、清障、代理</span></div>
-          <div class="config-grid">
-            <details open><summary>邮箱</summary><div class="detail-body">
-              <div class="field"><label for="EMAIL_MODE">邮箱模式</label><select id="EMAIL_MODE"><option value="tempmail">tempmail</option><option value="testmail">testmail</option><option value="custom">custom</option></select></div>
-              <div class="field"><label for="TESTMAIL_API_KEY">Testmail API Key</label><input id="TESTMAIL_API_KEY" type="password" autocomplete="off"></div>
-              <div class="field"><label for="TESTMAIL_NAMESPACE">Testmail Namespace</label><input id="TESTMAIL_NAMESPACE"></div>
-              <div class="field"><label for="TESTMAIL_DOMAIN">Testmail Domain</label><input id="TESTMAIL_DOMAIN" placeholder="inbox.testmail.app"></div>
-              <div class="field"><label for="EMAIL_DOMAIN">自建邮箱域名</label><input id="EMAIL_DOMAIN" placeholder="example.com"></div>
-              <div class="field"><label for="EMAIL_API">自建邮箱 API</label><input id="EMAIL_API" placeholder="http://127.0.0.1:8080"></div>
-            </div></details>
-            <details open><summary>代理与清障</summary><div class="detail-body">
-              <div class="field"><label for="CLEARANCE_ENABLED">清障栈</label><select id="CLEARANCE_ENABLED"><option value="1">开启</option><option value="0">关闭</option></select></div>
-              <div class="field"><label for="CLEARANCE_MODE">清障策略</label><select id="CLEARANCE_MODE"><option value="auto">auto</option><option value="always">always</option><option value="never">never</option></select><p class="field-hint">auto 会先走协议 TLS，遇到 Cloudflare 拦截再拉起清障栈。</p></div>
-              <div class="field"><label for="CLEARANCE_AUTO_STOP">结束后停止清障栈</label><select id="CLEARANCE_AUTO_STOP"><option value="0">关闭</option><option value="1">开启</option></select></div>
-              <div class="field"><label for="REGISTER_PROXY">注册代理</label><input id="REGISTER_PROXY"></div>
-              <div class="field"><label for="FLARESOLVERR_URL">FlareSolverr URL</label><input id="FLARESOLVERR_URL"></div>
-              <div class="field"><label for="CLEARANCE_PROXY">清障代理</label><input id="CLEARANCE_PROXY"></div>
-              <div class="field"><label for="CLEARANCE_URLS">清障 URL</label><textarea id="CLEARANCE_URLS"></textarea></div>
-              <div class="field"><label for="CF_IMPERSONATE">TLS 指纹</label><input id="CF_IMPERSONATE" placeholder="chrome_131"></div>
-              <div class="field"><label for="CF_IMPERSONATE_FALLBACK">TLS 备用指纹</label><input id="CF_IMPERSONATE_FALLBACK" placeholder="chrome_124,chrome_120"></div>
-            </div></details>
-          </div>
-          <div class="actions"><button type="button" id="saveMail">保存配置</button></div>
-          <p class="toast" id="mailToast"></p>
-        </section>
+    <section id="view-settings" class="view">
+      <section class="panel settings-shell">
+        <aside class="settings-nav">
+          <div class="settings-search"><input id="configSearch" type="search" placeholder="搜索配置项"></div>
+          <nav id="settingsTabs" class="settings-tabs" aria-label="配置分类"></nav>
+        </aside>
+        <div class="settings-main">
+          <header class="settings-head">
+            <h1 id="settingsTitle">输出与结果</h1>
+            <p id="settingsDescription">控制成功判定、输出文件和后续 CPA 链路。</p>
+            <div id="dependencyStrip" class="dependency-strip"></div>
+          </header>
+          <div><div id="configSections" class="config-sections"></div><div id="noConfigResults" class="no-results">没有匹配的配置项。</div></div>
+          <footer class="settings-footer">
+            <span id="saveState" class="save-state" role="status">配置读取中</span>
+            <div class="settings-actions"><button id="checkCPA" type="button" class="secondary">检测 CPA</button><button id="saveConfig" type="button">保存更改</button></div>
+          </footer>
+        </div>
       </section>
-
-      <section id="view-cpa" class="view">
-        <section class="panel config-page">
-          <div class="panel-head"><h2>CPA 上传</h2><span class="meta">上传前置条件和接口</span></div>
-          <div class="config-grid">
-            <details open><summary>上传</summary><div class="detail-body">
-              <p class="dependency-note" id="cpaSummary">CPA 自动上传需要先开启 CPA 文件输出。</p>
-              <div class="field" id="field_CPA_UPLOAD_ENABLED"><label for="CPA_UPLOAD_ENABLED">CPA 自动上传</label><select id="CPA_UPLOAD_ENABLED"><option value="0">关闭</option><option value="1">开启</option></select><p class="field-hint">开启后，探活通过的 CPA JSON 会上传到 Management API。</p></div>
-              <div class="field"><label for="CPA_MANAGEMENT_BASE">CPA Management Base</label><input id="CPA_MANAGEMENT_BASE"></div>
-              <div class="field"><label for="CPA_MANAGEMENT_KEY">CPA Management Key</label><input id="CPA_MANAGEMENT_KEY" type="password" autocomplete="off"></div>
-              <div class="field"><label for="CPA_UPLOAD_NAME_TEMPLATE">CPA 文件名模板</label><input id="CPA_UPLOAD_NAME_TEMPLATE"></div>
-            </div></details>
-          </div>
-          <div class="actions"><button type="button" id="saveCPA">保存配置</button><button type="button" class="secondary" id="checkCPA">检测 CPA</button></div>
-          <p class="toast" id="cpaToast"></p>
-        </section>
-      </section>
-    </main>
-  </div>
+    </section>
+  </main>
 
   <script>
     const $ = (id) => document.getElementById(id);
-    const state = { runs: [], selectedRun: "", status: "stopped", query: "", view: "live", pollTimer: 0, booted: false };
-    const configKeys = ["EMAIL_MODE","EMAIL_DOMAIN","EMAIL_API","TESTMAIL_API_KEY","TESTMAIL_NAMESPACE","TESTMAIL_DOMAIN","CLEARANCE_ENABLED","CLEARANCE_MODE","CLEARANCE_AUTO_STOP","CF_IMPERSONATE","CF_IMPERSONATE_FALLBACK","REGISTER_PROXY","FLARESOLVERR_URL","CLEARANCE_PROXY","CLEARANCE_URLS","TURNSTILE_PROVIDER","TURNSTILE_MODE","LITE_SOLVER_URL","OUTPUT_SSO_ENABLED","OUTPUT_GROK2API_SSO_ENABLED","OUTPUT_CPA_ENABLED","HTTP_POOL_SIZE","PHYSICAL_CAP","TURNSTILE_WORKERS","TEMPMAIL_LOL_RETRIES","TEMPMAIL_LOL_MIN_INTERVAL_MS","OAUTH_MIN_INTERVAL_SEC","OAUTH_RETRY_SEC","CPA_UPLOAD_ENABLED","CPA_MANAGEMENT_BASE","CPA_MANAGEMENT_KEY","CPA_UPLOAD_NAME_TEMPLATE"];
+    const groups = [
+      { id: "output", label: "输出与结果", description: "控制成功判定、输出文件和后续 CPA 链路。" },
+      { id: "email", label: "邮箱", description: "选择收件方式并配置验证码轮询。" },
+      { id: "clearance", label: "清障与指纹", description: "配置 Cloudflare 清障栈、访问代理和 TLS 指纹。" },
+      { id: "engine", label: "注册引擎", description: "控制 Turnstile、HTTP 并发、OAuth 和 CPA 探活节奏。" },
+      { id: "network", label: "网络代理", description: "设置进程级 HTTP 代理和不经过代理的地址。" },
+      { id: "cpa", label: "CPA 上传", description: "配置 Management API、上传格式、重试和结果校验。" }
+    ];
+    const fields = [
+      { key: "OUTPUT_SSO_ENABLED", group: "output", label: "SSO 文件输出", type: "bool", note: "写入 accounts.txt 和 auth-sessions.jsonl。" },
+      { key: "OUTPUT_GROK2API_SSO_ENABLED", group: "output", label: "grok2api SSO", type: "bool", note: "写入 grok2api/tokens.txt；依赖 SSO 文件输出。" },
+      { key: "OUTPUT_CPA_ENABLED", group: "output", label: "CPA 输出", type: "bool", note: "关闭后，获得 SSO 即计成功，并跳过 OAuth、探活和 CPA JSON。" },
+      { key: "EMAIL_MODE", group: "email", label: "邮箱模式", type: "select", options: [["tempmail", "tempmail.lol"], ["testmail", "testmail.app"], ["custom", "自建域名邮箱"]] },
+      { key: "EMAIL_DOMAIN", group: "email", label: "自建邮箱域名", placeholder: "example.com", depends: "email-custom" },
+      { key: "EMAIL_API", group: "email", label: "自建邮箱 API", type: "url", placeholder: "http://127.0.0.1:8080", depends: "email-custom" },
+      { key: "TESTMAIL_API_KEY", group: "email", label: "Testmail API Key", type: "password", depends: "email-testmail" },
+      { key: "TESTMAIL_NAMESPACE", group: "email", label: "Testmail Namespace", depends: "email-testmail" },
+      { key: "TESTMAIL_DOMAIN", group: "email", label: "Testmail Domain", placeholder: "inbox.testmail.app", depends: "email-testmail" },
+      { key: "TEMPMAIL_LOL_RETRIES", group: "email", label: "邮箱轮询次数", type: "number", min: "1", step: "1" },
+      { key: "TEMPMAIL_LOL_MIN_INTERVAL_MS", group: "email", label: "邮箱轮询间隔", type: "number", min: "100", step: "100", suffix: "ms" },
+      { key: "CLEARANCE_ENABLED", group: "clearance", label: "启用清障栈", type: "bool" },
+      { key: "CLEARANCE_MODE", group: "clearance", label: "清障策略", type: "select", options: [["auto", "自动：遇到拦截时启动"], ["always", "总是启动"], ["never", "永不启动"]], depends: "clearance" },
+      { key: "CLEARANCE_AUTO_STOP", group: "clearance", label: "结束后停止清障栈", type: "bool", depends: "clearance" },
+      { key: "CLEARANCE_COMPOSE_DIR", group: "clearance", label: "清障 Compose 目录", placeholder: "留空则自动发现", depends: "clearance" },
+      { key: "REGISTER_PROXY", group: "clearance", label: "注册代理", type: "url", depends: "clearance" },
+      { key: "FLARESOLVERR_URL", group: "clearance", label: "FlareSolverr URL", type: "url", depends: "clearance" },
+      { key: "CLEARANCE_PROXY", group: "clearance", label: "清障代理", type: "url", depends: "clearance" },
+      { key: "CLEARANCE_URLS", group: "clearance", label: "清障 URL", type: "textarea", wide: true, depends: "clearance" },
+      { key: "CF_IMPERSONATE", group: "clearance", label: "TLS 指纹", placeholder: "chrome_131" },
+      { key: "CF_IMPERSONATE_FALLBACK", group: "clearance", label: "TLS 备用指纹", placeholder: "chrome_124,chrome_120" },
+      { key: "TURNSTILE_PROVIDER", group: "engine", label: "Turnstile Provider", placeholder: "browser" },
+      { key: "TURNSTILE_MODE", group: "engine", label: "Turnstile 模式", type: "select", options: [["offscreen", "offscreen"], ["headless", "headless"], ["auto", "auto"]] },
+      { key: "LITE_SOLVER_URL", group: "engine", label: "Lite Solver URL", type: "url" },
+      { key: "PROTOCOL_HTTP", group: "engine", label: "协议 HTTP 客户端", type: "bool" },
+      { key: "HTTP_POOL_SIZE", group: "engine", label: "HTTP 并发池", type: "number", min: "1", step: "1" },
+      { key: "PHYSICAL_CAP", group: "engine", label: "物理并发上限", type: "number", min: "0", step: "1", note: "0 表示不额外限制。" },
+      { key: "TURNSTILE_WORKERS", group: "engine", label: "默认注册线程", type: "number", min: "1", max: "8", step: "1", note: "同步到任务控制条，启动时仍可临时调整。" },
+      { key: "OAUTH_MIN_INTERVAL_SEC", group: "engine", label: "OAuth 最小间隔", type: "number", min: "0", step: "0.5", suffix: "秒" },
+      { key: "OAUTH_RETRY_SEC", group: "engine", label: "OAuth 重试冷却", type: "number", min: "0", step: "0.5", suffix: "秒" },
+      { key: "OAUTH_WORKERS", group: "engine", label: "OAuth Workers", type: "number", min: "0", max: "4", step: "1", note: "0 表示自动选择并发数。", depends: "cpa-output" },
+      { key: "PROBE_ENABLED", group: "engine", label: "CPA 探活", type: "bool", depends: "cpa-output" },
+      { key: "PROBE_WARMUP_SEC", group: "engine", label: "探活预热", type: "number", min: "0", step: "0.1", suffix: "秒", depends: "probe" },
+      { key: "HTTPS_PROXY", group: "network", label: "HTTPS Proxy", placeholder: "http://privoxy:8118" },
+      { key: "HTTP_PROXY", group: "network", label: "HTTP Proxy", placeholder: "http://privoxy:8118" },
+      { key: "NO_PROXY", group: "network", label: "No Proxy", type: "textarea", wide: true, note: "多个主机名使用英文逗号分隔。" },
+      { key: "CPA_UPLOAD_ENABLED", group: "cpa", label: "CPA 自动上传", type: "bool", note: "只有 CPA 输出同时开启时才会上传。", depends: "cpa-output" },
+      { key: "CPA_MANAGEMENT_BASE", group: "cpa", label: "Management Base", type: "url", depends: "cpa-upload" },
+      { key: "CPA_MANAGEMENT_KEY", group: "cpa", label: "Management Key", type: "password", depends: "cpa-upload" },
+      { key: "CPA_UPLOAD_TIMEOUT_SEC", group: "cpa", label: "上传超时", type: "number", min: "1", step: "1", suffix: "秒", depends: "cpa-upload" },
+      { key: "CPA_UPLOAD_RETRIES", group: "cpa", label: "上传重试次数", type: "number", min: "0", step: "1", depends: "cpa-upload" },
+      { key: "CPA_UPLOAD_NAME_TEMPLATE", group: "cpa", label: "文件名模板", placeholder: "{email}", note: "可用 {email}、{provider}、{sub}；.json 扩展名会自动补齐。", depends: "cpa-upload" },
+      { key: "CPA_UPLOAD_VERIFY", group: "cpa", label: "上传后校验", type: "bool", depends: "cpa-upload" },
+      { key: "CPA_UPLOAD_MODE", group: "cpa", label: "上传格式", type: "select", options: [["multipart", "multipart"], ["json", "json"]], depends: "cpa-upload" }
+    ];
+    const configKeys = fields.map((field) => field.key);
+    const state = { view: "overview", status: "stopped", runs: [], selectedRun: "", query: "", config: {}, savedConfig: {}, configGroup: "output", configQuery: "", pollTimer: 0 };
 
-    async function api(path, options) {
-      const res = await fetch(path, options);
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error || data.output || res.statusText);
+    function escapeHTML(value) {
+      return String(value ?? "").replace(/[&<>"']/g, (char) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[char]));
+    }
+    function formatSize(bytes) {
+      if (!bytes) return "0 B";
+      const units = ["B", "KB", "MB", "GB"];
+      let value = Number(bytes), unit = 0;
+      while (value >= 1024 && unit < units.length - 1) { value /= 1024; unit += 1; }
+      return (unit ? value.toFixed(value >= 10 ? 0 : 1) : value) + " " + units[unit];
+    }
+    function formatDate(value) {
+      if (!value) return "";
+      const date = new Date(value);
+      return Number.isNaN(date.getTime()) ? value : new Intl.DateTimeFormat("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false }).format(date);
+    }
+    async function api(url, options) {
+      const response = await fetch(url, options);
+      const text = await response.text();
+      let data = {};
+      try { data = text ? JSON.parse(text) : {}; } catch { data = { error: text || "请求失败" }; }
+      if (!response.ok) throw new Error(data.error || ("HTTP " + response.status));
       return data;
     }
-    const html = (text) => String(text ?? "").replace(/[&<>"']/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" }[ch]));
-    const size = (n) => {
-      n = Number(n || 0);
-      if (n > 1024 * 1024) return (n / 1024 / 1024).toFixed(1) + " MB";
-      if (n > 1024) return (n / 1024).toFixed(1) + " KB";
-      return n + " B";
-    };
-    const shortTime = (value) => value ? new Date(value).toLocaleString() : "-";
-    const setToast = (id, text) => { const el = $(id); if (el) el.textContent = text || ""; };
 
-    function showView(name) {
-      state.view = name;
-      for (const button of document.querySelectorAll(".nav-button, .nav-jump")) {
-        if (button.classList.contains("nav-button")) button.classList.toggle("active", button.dataset.view === name);
+    function renderConfigUI() {
+      $("settingsTabs").innerHTML = groups.map((group) => {
+        const count = fields.filter((field) => field.group === group.id).length;
+        return `<button type="button" class="settings-tab${group.id === state.configGroup ? " active" : ""}" data-config-group="${group.id}"><span>${group.label}</span><span class="settings-tab-count">${count}</span></button>`;
+      }).join("");
+      $("configSections").innerHTML = groups.map((group) => {
+        const content = fields.filter((field) => field.group === group.id).map(renderConfigField).join("");
+        return `<section id="config-group-${group.id}" class="config-group${group.id === state.configGroup ? " active" : ""}" data-group="${group.id}"><div class="config-fields">${content}</div></section>`;
+      }).join("");
+      for (const button of document.querySelectorAll("[data-config-group]")) button.addEventListener("click", () => selectConfigGroup(button.dataset.configGroup));
+      for (const field of fields) {
+        const input = $(field.key);
+        if (!input) continue;
+        input.addEventListener("change", configChanged);
+        input.addEventListener("input", configChanged);
       }
-      for (const view of document.querySelectorAll(".view")) view.classList.toggle("active", view.id === "view-" + name);
-      if (name === "live") refreshLive();
-      if (name === "history") refreshRuns();
-      if (name === "flow" || name === "mail" || name === "cpa") loadConfig();
-    }
-
-    async function refreshStatus() {
-      const s = await api("/api/status");
-      state.status = s.status || "stopped";
-      $("done").textContent = s.done || 0;
-      $("target").textContent = s.target || 0;
-      $("oauth").textContent = s.oauth_count || 0;
-      $("fail").textContent = s.fail_count || 0;
-      if (document.activeElement !== $("targetInput") && state.status === "running") $("targetInput").value = s.target || $("targetInput").value || 10;
-      $("phase").textContent = s.phase_detail || s.phase || "未运行";
-      $("railStatus").textContent = state.status === "running" ? "运行中" : state.status === "error" ? "错误" : "未运行";
-      const pill = $("statusPill");
-      pill.textContent = state.status === "running" ? "运行中" : state.status === "error" ? "错误" : "未运行";
-      pill.className = "status-pill " + state.status;
-      updatePolling();
-    }
-
-    async function refreshLogs() {
-      const data = await api("/api/logs?tail=350");
-      $("logs").textContent = data.lines && data.lines.length ? data.lines.join("\n") : "暂无实时日志";
-      $("logPath").textContent = data.path ? data.path.split(/[\\/]/).pop() : "no log";
-      $("logs").scrollTop = $("logs").scrollHeight;
-    }
-
-    async function refreshRuns() {
-      state.runs = await api("/api/runs");
-      renderRuns();
-      renderRecentRuns();
-      if (!state.selectedRun && state.runs.length) {
-        await selectRun(state.runs[0].id);
-      } else if (state.selectedRun && state.runs.some(r => r.id === state.selectedRun)) {
-        await selectRun(state.selectedRun, true);
-      }
-    }
-
-    function runMatches(run, q) {
-      if (!q) return true;
-      return [run.id, run.sso_count, run.grok2api_sso_count, run.cpa_count, run.discarded_count, run.log_exists ? "日志" : ""].join(" ").toLowerCase().includes(q);
-    }
-
-    function runCard(run, active) {
-      return [
-        "<button type=\"button\" class=\"run-card " + (active ? "active" : "") + "\" data-run=\"" + html(run.id) + "\">",
-        "<span class=\"run-title\"><span>" + html(run.id) + "</span><span>" + (run.log_exists ? "日志" : "无日志") + "</span></span>",
-        "<span class=\"chips\">",
-        "<span class=\"chip\">SSO " + (run.sso_count || 0) + "</span>",
-        "<span class=\"chip\">grok2api " + (run.grok2api_sso_count || 0) + "</span>",
-        "<span class=\"chip\">CPA " + (run.cpa_count || 0) + "</span>",
-        "<span class=\"chip\">丢弃 " + (run.discarded_count || 0) + "</span>",
-        "<span class=\"chip\">" + size(run.total_size) + "</span>",
-        "</span>",
-        "</button>"
-      ].join("");
-    }
-
-    function bindRunCards(root) {
-      for (const item of root.querySelectorAll(".run-card")) {
-        item.addEventListener("click", () => {
-          showView("history");
-          selectRun(item.dataset.run);
+      for (const button of document.querySelectorAll("[data-reveal]")) {
+        button.addEventListener("click", () => {
+          const input = $(button.dataset.reveal);
+          const showing = input.type === "text";
+          input.type = showing ? "password" : "text";
+          button.textContent = showing ? "显示" : "隐藏";
         });
       }
     }
-
-    function renderRuns() {
-      const q = state.query.toLowerCase().trim();
-      const runs = state.runs.filter(r => runMatches(r, q));
-      $("runs").innerHTML = runs.length ? runs.map(r => runCard(r, r.id === state.selectedRun)).join("") : "<div class=\"empty\">暂无历史记录。启动一次注册任务后会出现在这里。</div>";
-      bindRunCards($("runs"));
+    function renderConfigField(field) {
+      let control = "";
+      if (field.type === "bool") {
+        control = `<div class="switch-row"><span class="switch-copy">关闭 / 开启</span><label class="switch"><input id="${field.key}" type="checkbox"><span class="switch-track"></span></label></div>`;
+      } else if (field.type === "select") {
+        control = `<select id="${field.key}">${field.options.map(([value, label]) => `<option value="${escapeHTML(value)}">${escapeHTML(label)}</option>`).join("")}</select>`;
+      } else if (field.type === "textarea") {
+        control = `<textarea id="${field.key}"${field.placeholder ? ` placeholder="${escapeHTML(field.placeholder)}"` : ""}></textarea>`;
+      } else {
+        const type = field.type === "password" ? "password" : field.type === "number" ? "number" : field.type === "url" ? "url" : "text";
+        const attrs = [field.min && `min="${field.min}"`, field.max && `max="${field.max}"`, field.step && `step="${field.step}"`, field.placeholder && `placeholder="${escapeHTML(field.placeholder)}"`, field.type === "password" && "autocomplete=\"off\""].filter(Boolean).join(" ");
+        const input = `<input id="${field.key}" type="${type}" ${attrs}>`;
+        control = field.type === "password" ? `<div class="password-wrap">${input}<button type="button" class="secondary" data-reveal="${field.key}">显示</button></div>` : input;
+      }
+      const note = field.note || (field.suffix ? `单位：${field.suffix}` : "");
+      const search = `${field.label} ${field.key} ${note}`.toLowerCase();
+      return `<div id="field-${field.key}" class="config-field${field.wide ? " wide" : ""}" data-key="${field.key}" data-search="${escapeHTML(search)}" data-depends="${field.depends || ""}"><div class="field-heading"><label for="${field.key}">${field.label}</label><span class="config-key">${field.key}</span></div>${control}<p class="field-note">${escapeHTML(note)}</p></div>`;
     }
-
-    function renderRecentRuns() {
-      const recent = state.runs.slice(0, 4);
-      $("recentRuns").innerHTML = recent.length ? recent.map(r => runCard(r, false)).join("") : "<div class=\"empty\">暂无历史记录。</div>";
-      bindRunCards($("recentRuns"));
+    function selectConfigGroup(groupID) {
+      state.configGroup = groupID;
+      for (const button of document.querySelectorAll("[data-config-group]")) button.classList.toggle("active", button.dataset.configGroup === groupID);
+      for (const section of document.querySelectorAll(".config-group")) section.classList.toggle("active", section.dataset.group === groupID);
+      const group = groups.find((item) => item.id === groupID);
+      if (group) { $("settingsTitle").textContent = group.label; $("settingsDescription").textContent = group.description; }
+      state.configQuery = "";
+      $("configSearch").value = "";
+      filterConfig();
     }
-
-    async function selectRun(id, silent) {
-      state.selectedRun = id;
-      renderRuns();
-      if (!silent) $("runDetail").innerHTML = "<div class=\"empty\">读取 run 详情...</div>";
+    function fieldValue(key) {
+      const input = $(key);
+      if (!input) return "";
+      return input.type === "checkbox" ? (input.checked ? "1" : "0") : input.value.trim();
+    }
+    function readFormConfig() {
+      return Object.fromEntries(configKeys.map((key) => [key, fieldValue(key)]));
+    }
+    function setFormConfig(config) {
+      for (const field of fields) {
+        const input = $(field.key);
+        if (!input) continue;
+        if (input.type === "checkbox") input.checked = config[field.key] === "1";
+        else input.value = config[field.key] ?? "";
+      }
+    }
+    function configChanged() {
+      state.config = readFormConfig();
+      const dirty = configKeys.filter((key) => state.config[key] !== state.savedConfig[key]);
+      $("saveState").textContent = dirty.length ? `有 ${dirty.length} 项未保存` : "配置已同步";
+      $("saveState").className = "save-state" + (dirty.length ? " dirty" : "");
+      $("saveConfig").disabled = !dirty.length;
+      if ($("TURNSTILE_WORKERS") && document.activeElement === $("TURNSTILE_WORKERS")) $("threadInput").value = fieldValue("TURNSTILE_WORKERS") || "2";
+      updateDependencies();
+      renderPipeline();
+    }
+    function setDependentField(key, disabled) {
+      const wrap = $("field-" + key);
+      const input = $(key);
+      if (wrap) wrap.dataset.disabled = disabled ? "true" : "false";
+      if (input) input.disabled = disabled;
+      const reveal = document.querySelector(`[data-reveal="${key}"]`);
+      if (reveal) reveal.disabled = disabled;
+    }
+    function updateDependencies() {
+      const cfg = readFormConfig();
+      const sso = cfg.OUTPUT_SSO_ENABLED === "1";
+      const cpa = cfg.OUTPUT_CPA_ENABLED === "1";
+      const upload = cpa && cfg.CPA_UPLOAD_ENABLED === "1";
+      const clearance = cfg.CLEARANCE_ENABLED === "1";
+      const emailMode = cfg.EMAIL_MODE;
+      const probe = cpa && cfg.PROBE_ENABLED === "1";
+      for (const field of fields) {
+        let disabled = false;
+        if (field.key === "OUTPUT_GROK2API_SSO_ENABLED") disabled = !sso;
+        if (field.depends === "email-custom") disabled = emailMode !== "custom";
+        if (field.depends === "email-testmail") disabled = emailMode !== "testmail";
+        if (field.depends === "clearance") disabled = !clearance;
+        if (field.depends === "cpa-output") disabled = !cpa;
+        if (field.depends === "cpa-upload") disabled = !upload;
+        if (field.depends === "probe") disabled = !probe;
+        setDependentField(field.key, disabled);
+      }
+      $("dependencyStrip").innerHTML = [
+        ["SSO", sso, false],
+        ["grok2api", sso && cfg.OUTPUT_GROK2API_SSO_ENABLED === "1", !sso],
+        ["CPA", cpa, false],
+        ["OAuth / 探活", cpa, !cpa],
+        ["自动上传", upload, !cpa]
+      ].map(([label, on, blocked]) => `<span class="dependency-item ${on ? "on" : blocked ? "blocked" : ""}">${label}：${on ? "开启" : blocked ? "不生效" : "关闭"}</span>`).join("");
+    }
+    function filterConfig() {
+      const query = state.configQuery.trim().toLowerCase();
+      let visible = 0;
+      if (query) {
+        for (const section of document.querySelectorAll(".config-group")) section.classList.add("active");
+        for (const field of document.querySelectorAll(".config-field")) {
+          const show = field.dataset.search.includes(query);
+          field.classList.toggle("hidden-by-search", !show);
+          if (show) visible += 1;
+        }
+      } else {
+        for (const section of document.querySelectorAll(".config-group")) section.classList.toggle("active", section.dataset.group === state.configGroup);
+        for (const field of document.querySelectorAll(".config-field")) field.classList.remove("hidden-by-search");
+        visible = fields.filter((field) => field.group === state.configGroup).length;
+      }
+      $("noConfigResults").style.display = visible ? "none" : "block";
+    }
+    async function loadConfig() {
       try {
-        const detail = await api("/api/runs/detail?id=" + encodeURIComponent(id));
-        renderRunDetail(detail);
-      } catch (err) {
-        $("runDetail").innerHTML = "<div class=\"empty\">读取失败：" + html(err.message) + "</div>";
+        const config = await api("/api/config");
+        state.config = Object.fromEntries(configKeys.map((key) => [key, config[key] ?? ""]));
+        state.savedConfig = { ...state.config };
+        setFormConfig(state.config);
+        $("threadInput").value = state.config.TURNSTILE_WORKERS || "2";
+        $("saveConfig").disabled = true;
+        $("saveState").textContent = "配置已同步";
+        updateDependencies();
+        renderPipeline();
+      } catch (error) {
+        $("saveState").textContent = "读取失败：" + error.message;
+        $("saveState").className = "save-state error";
+      }
+    }
+    async function saveConfig() {
+      const invalid = fields.map((field) => $(field.key)).find((input) => input && !input.disabled && !input.checkValidity());
+      if (invalid) { invalid.reportValidity(); return false; }
+      $("saveConfig").disabled = true;
+      $("saveState").textContent = "正在保存...";
+      $("saveState").className = "save-state";
+      try {
+        const next = readFormConfig();
+        const result = await api("/api/config", { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify(next) });
+        state.config = Object.fromEntries(configKeys.map((key) => [key, result.config[key] ?? next[key] ?? ""]));
+        state.savedConfig = { ...state.config };
+        setFormConfig(state.config);
+        $("saveState").textContent = "已保存，新任务将使用最新配置";
+        updateDependencies();
+        renderPipeline();
+        return true;
+      } catch (error) {
+        $("saveState").textContent = "保存失败：" + error.message;
+        $("saveState").className = "save-state error";
+        $("saveConfig").disabled = false;
+        return false;
       }
     }
 
+    function renderPipeline() {
+      const cfg = Object.keys(state.config).length ? readFormConfig() : state.config;
+      const phase = state.snapshot?.phase || "idle";
+      const sso = cfg.OUTPUT_SSO_ENABLED === "1";
+      const grok2api = sso && cfg.OUTPUT_GROK2API_SSO_ENABLED === "1";
+      const cpa = cfg.OUTPUT_CPA_ENABLED === "1";
+      const upload = cpa && cfg.CPA_UPLOAD_ENABLED === "1";
+      const stages = [
+        { n: "01", title: "注册与 SSO", detail: sso ? "保留 SSO 文件" : "获得 SSO 后计成功", active: phase === "register" || state.status === "running" },
+        { n: "02", title: "grok2api SSO", detail: grok2api ? "写入 tokens.txt" : "不输出", active: grok2api, skipped: !grok2api },
+        { n: "03", title: "OAuth 与探活", detail: cpa ? "交换令牌并验证" : "整段跳过", active: cpa && ["oauth", "probe"].includes(phase), skipped: !cpa },
+        { n: "04", title: "CPA 输出", detail: cpa ? "写入 CPA JSON" : "不输出", active: cpa, skipped: !cpa },
+        { n: "05", title: "自动上传", detail: upload ? "发送到 Management API" : "不上传", active: upload, skipped: !upload }
+      ];
+      $("pipeline").innerHTML = stages.map((stage) => `<div class="stage${stage.active ? " active" : ""}${stage.skipped ? " skipped" : ""}"><span class="stage-node">${stage.n}</span><span class="stage-copy"><b>${stage.title}</b><span>${stage.detail}</span></span><span class="stage-state">${stage.skipped ? "跳过" : stage.active ? "生效" : "待执行"}</span></div>`).join("");
+    }
+
+    function phaseLabel(snapshot) {
+      const labels = { idle: "等待启动", clearance: "准备清障环境", register: "注册与获取 SSO", oauth: "OAuth 令牌交换", probe: "CPA 探活" };
+      if (snapshot.error) return snapshot.error;
+      return snapshot.phase_detail || labels[snapshot.phase] || (snapshot.status === "running" ? "任务运行中" : "当前没有运行中的任务");
+    }
+    async function refreshStatus() {
+      try {
+        const snapshot = await api("/api/status");
+        state.snapshot = snapshot;
+        state.status = snapshot.status || "stopped";
+        const running = state.status === "running";
+        const errored = state.status === "error";
+        const text = running ? "运行中" : errored ? "异常" : "已停止";
+        $("statusBadge").textContent = text;
+        $("statusBadge").className = "status-badge" + (running ? " running" : errored ? " error" : "");
+        $("headerDot").className = "state-dot" + (running ? " running" : errored ? " error" : "");
+        $("headerStatus").textContent = text;
+        $("runID").textContent = snapshot.run_id || "尚无运行记录";
+        $("phase").textContent = phaseLabel(snapshot);
+        $("done").textContent = snapshot.done || 0;
+        $("target").textContent = snapshot.target || 0;
+        $("oauth").textContent = snapshot.oauth_count || 0;
+        $("fail").textContent = snapshot.fail_count || 0;
+        $("rate").textContent = Number(snapshot.rate_per_min || 0).toFixed(snapshot.rate_per_min >= 10 ? 0 : 1);
+        const progress = snapshot.target ? Math.min(100, Math.round((snapshot.done || 0) / snapshot.target * 100)) : 0;
+        $("progressFill").style.width = progress + "%";
+        $("startButton").disabled = running;
+        $("stopButton").disabled = !running;
+        updatePolling();
+        renderPipeline();
+      } catch (error) {
+        $("headerStatus").textContent = "状态不可用";
+        $("phase").textContent = error.message;
+      }
+    }
+    async function refreshLogs() {
+      try {
+        const data = await api("/api/logs?tail=500");
+        $("logPath").textContent = data.path ? data.path.split(/[\\/]/).pop() : "尚无日志";
+        $("logs").textContent = data.lines?.length ? data.lines.join("\n") : "暂无日志。启动任务后，运行输出会显示在这里。";
+        $("logs").scrollTop = $("logs").scrollHeight;
+      } catch (error) { $("logs").textContent = "日志读取失败：" + error.message; }
+    }
+
+    function runCard(run, active) {
+      return `<button type="button" class="run-card${active ? " active" : ""}" data-run-id="${escapeHTML(run.id)}"><span class="run-card-top"><b class="run-card-id">${escapeHTML(run.id)}</b><span class="run-card-date">${escapeHTML(formatDate(run.modified_at))}</span></span><span class="chips"><span class="chip">SSO ${run.sso_count || 0}</span><span class="chip">grok2api ${run.grok2api_sso_count || 0}</span><span class="chip">CPA ${run.cpa_count || 0}</span><span class="chip">丢弃 ${run.discarded_count || 0}</span></span></button>`;
+    }
+    function bindRunCards(root) {
+      for (const card of root.querySelectorAll("[data-run-id]")) card.addEventListener("click", () => { showView("history"); selectRun(card.dataset.runId); });
+    }
+    function renderRuns() {
+      const query = state.query.trim().toLowerCase();
+      const filtered = state.runs.filter((run) => !query || [run.id, run.log_exists ? "日志" : "", run.sso_count ? "sso" : "", run.grok2api_sso_count ? "grok2api" : "", run.cpa_count ? "cpa" : "", run.discarded_count ? "丢弃" : ""].join(" ").toLowerCase().includes(query));
+      $("runs").innerHTML = filtered.length ? filtered.map((run) => runCard(run, run.id === state.selectedRun)).join("") : `<div class="empty">${query ? "没有匹配的历史记录。" : "暂无历史记录。"}</div>`;
+      bindRunCards($("runs"));
+      const recent = state.runs.slice(0, 4);
+      $("recentRuns").innerHTML = recent.length ? recent.map((run) => runCard(run, false)).join("") : '<div class="empty">暂无历史记录。</div>';
+      bindRunCards($("recentRuns"));
+    }
+    async function refreshRuns() {
+      try { state.runs = await api("/api/runs"); renderRuns(); } catch (error) { $("runs").innerHTML = `<div class="empty">读取失败：${escapeHTML(error.message)}</div>`; }
+    }
+    async function selectRun(id, silent) {
+      state.selectedRun = id;
+      renderRuns();
+      if (!silent) $("runDetail").innerHTML = '<div class="empty">读取记录详情...</div>';
+      try { renderRunDetail(await api("/api/runs/detail?id=" + encodeURIComponent(id))); } catch (error) { $("runDetail").innerHTML = `<div class="empty">读取失败：${escapeHTML(error.message)}</div>`; }
+    }
     function renderRunDetail(detail) {
       const groups = [
-        ["sso", "SSO", "如果 SSO 文件输出关闭，这里会为空。"],
-        ["grok2api", "grok2api SSO", "开启后写入 grok2api/tokens.txt，每行一个裸 SSO token。"],
-        ["cpa", "CPA", "如果 CPA 文件输出关闭，或 OAuth/探活未通过，这里会为空。"],
-        ["discarded", "discarded", "探活失败或超出目标后移入这里。"]
+        ["sso", "SSO", "该任务没有 SSO 输出文件。"],
+        ["grok2api", "grok2api SSO", "该任务没有 grok2api token 文件。"],
+        ["cpa", "CPA", "该任务没有 CPA 输出文件。"],
+        ["discarded", "丢弃", "该任务没有丢弃记录。"]
       ];
       $("runDetail").innerHTML = [
-        "<div class=\"panel-head\"><h2>" + html(detail.id) + "</h2><span class=\"meta\">" + shortTime(detail.modified_at) + "</span></div>",
-        "<div class=\"detail-actions\">",
-        "<a class=\"download\" href=\"" + html(detail.download_url) + "\">下载全部</a>",
-        "<a class=\"download secondary\" href=\"" + html(detail.download_sso_url) + "\">下载 SSO</a>",
-        "<a class=\"download secondary\" href=\"" + html(detail.download_cpa_url) + "\">下载 CPA</a>",
-        "<a class=\"download secondary\" href=\"" + html(detail.download_discarded_url) + "\">下载丢弃</a>",
-        detail.log_exists ? "<a class=\"download secondary\" href=\"" + html(detail.download_log_url) + "\">下载日志</a>" : "",
-        "<button type=\"button\" class=\"secondary\" id=\"copyRunID\">复制 run ID</button>",
-        "<button type=\"button\" class=\"secondary\" id=\"deleteRecord\" " + (detail.delete_disabled ? "disabled" : "") + ">删除记录</button>",
-        "<button type=\"button\" class=\"danger\" id=\"deleteRun\" " + (detail.delete_disabled ? "disabled" : "") + ">删除记录和文件</button>",
-        "</div>",
-        "<div class=\"file-groups\">" + groups.map(([key, label, empty]) => renderFileGroup(label, detail.files[key] || [], empty)).join("") + "</div>",
-        "<section class=\"history-log\">",
-        "<div class=\"panel-head\"><h2>历史日志</h2><span>" + (detail.log.exists ? html(detail.log.path.split(/[\\/]/).pop()) : "未找到日志") + "</span></div>",
-        "<pre id=\"historyLog\">" + (detail.log.exists && detail.log.lines.length ? html(detail.log.lines.join("\n")) : "未找到该 run 的日志文件。") + "</pre>",
-        "</section>"
+        '<div class="detail-heading"><div><h2>' + escapeHTML(detail.id) + '</h2><div class="detail-summary"><span class="chip">SSO ' + (detail.sso_count || 0) + '</span><span class="chip">grok2api ' + (detail.grok2api_sso_count || 0) + '</span><span class="chip">CPA ' + (detail.cpa_count || 0) + '</span><span class="chip">' + formatSize(detail.total_size) + '</span></div></div></div>',
+        '<div class="detail-actions">',
+        '<a class="download" href="' + escapeHTML(detail.download_url) + '">下载全部</a>',
+        '<a class="download secondary" href="' + escapeHTML(detail.download_sso_url) + '">下载 SSO</a>',
+        '<a class="download secondary" href="' + escapeHTML(detail.download_grok2api_url) + '">下载 grok2api SSO</a>',
+        '<a class="download secondary" href="' + escapeHTML(detail.download_cpa_url) + '">下载 CPA</a>',
+        '<a class="download secondary" href="' + escapeHTML(detail.download_discarded_url) + '">下载丢弃</a>',
+        detail.log_exists ? '<a class="download secondary" href="' + escapeHTML(detail.download_log_url) + '">下载日志</a>' : '',
+        '<button type="button" class="secondary" id="copyRunID">复制 run ID</button>',
+        '<button type="button" class="secondary" id="deleteRecord" ' + (detail.delete_disabled ? 'disabled' : '') + '>删除记录</button>',
+        '<button type="button" class="danger" id="deleteRun" ' + (detail.delete_disabled ? 'disabled' : '') + '>删除记录和文件</button>',
+        '</div>',
+        '<div class="file-groups">' + groups.map(([key, label, empty]) => renderFileGroup(label, detail.files[key] || [], empty)).join("") + '</div>',
+        '<section class="history-log"><div class="panel-head"><h2 class="panel-title">历史日志</h2><span class="panel-meta">' + (detail.log.exists ? escapeHTML(detail.log.path.split(/[\\/]/).pop()) : "未找到日志") + '</span></div><pre>' + (detail.log.exists && detail.log.lines.length ? escapeHTML(detail.log.lines.join("\n")) : "未找到该 run 的日志文件。") + '</pre></section>'
       ].join("");
       $("copyRunID").addEventListener("click", () => copyRunID(detail.id));
       $("deleteRecord").addEventListener("click", () => deleteSelectedRun(detail.id, "record"));
       $("deleteRun").addEventListener("click", () => deleteSelectedRun(detail.id, "all"));
     }
-
     function renderFileGroup(label, files, emptyText) {
-      return [
-        "<section class=\"file-group\">",
-        "<header><b>" + html(label) + "</b><span class=\"muted\">" + files.length + "</span></header>",
-        "<div class=\"file-list\">",
-        files.length ? files.map(file => "<div class=\"file-row\"><span class=\"file-name\">" + html(file.name) + "</span><span class=\"muted\">" + size(file.size) + "</span></div>").join("") : "<div class=\"empty\">" + html(emptyText) + "</div>",
-        "</div>",
-        "</section>"
-      ].join("");
+      return `<section class="file-group"><header><b>${escapeHTML(label)}</b><span class="muted">${files.length}</span></header>${files.length ? files.map((file) => `<div class="file-row"><span class="file-name">${escapeHTML(file.name)}</span><span class="muted">${formatSize(file.size)}</span></div>`).join("") : `<div class="empty">${escapeHTML(emptyText)}</div>`}</section>`;
     }
-
     async function copyRunID(id) {
-      try {
-        await navigator.clipboard.writeText(id);
-        setToast("toast", "已复制 run ID：" + id);
-      } catch {
-        window.prompt("复制 run ID", id);
-      }
+      try { await navigator.clipboard.writeText(id); setRunMessage("已复制 run ID：" + id); } catch { window.prompt("复制 run ID", id); }
     }
-
     async function deleteSelectedRun(id, mode) {
-      const current = state.runs.find(r => r.id === id);
-      if (current && current.delete_disabled) {
-        alert("当前 run 正在运行，停止后才能删除。");
-        return;
-      }
+      const run = state.runs.find((item) => item.id === id);
+      if (run?.delete_disabled) { window.alert("当前任务正在运行，停止后才能删除。"); return; }
       const recordOnly = mode === "record";
-      const text = recordOnly
-        ? "确定删除历史记录 " + id + "？输出文件和日志会保留在本地目录中。"
-        : "确定删除记录和文件 " + id + "？将同时删除输出目录和对应日志，此操作不可恢复。";
-      if (!confirm(text)) return;
+      const message = recordOnly ? `确定删除历史记录 ${id}？输出文件和日志仍会保留。` : `确定删除记录和文件 ${id}？此操作不可恢复。`;
+      if (!window.confirm(message)) return;
       try {
-        await api("/api/runs/delete", { method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({ id, mode: recordOnly ? "record" : "all" }) });
+        await api("/api/runs/delete", { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({ id, mode }) });
         state.selectedRun = "";
-        $("runDetail").innerHTML = "<div class=\"empty\">" + (recordOnly ? "已删除历史记录 " : "已删除记录和文件 ") + html(id) + "。</div>";
+        $("runDetail").innerHTML = `<div class="empty">${recordOnly ? "已删除历史记录" : "已删除记录和文件"} ${escapeHTML(id)}。</div>`;
         await refreshRuns();
-      } catch (err) {
-        alert("删除失败：" + err.message);
-      }
+      } catch (error) { window.alert("删除失败：" + error.message); }
     }
 
-    async function loadConfig() {
-      const cfg = await api("/api/config");
-      for (const key of configKeys) {
-        const el = $(key);
-        if (el) el.value = cfg[key] || "";
-      }
-      $("threadInput").value = cfg.TURNSTILE_WORKERS || "2";
-      updateConfigDependencies();
+    function showView(view) {
+      state.view = view;
+      for (const button of document.querySelectorAll(".nav-button")) button.classList.toggle("active", button.dataset.view === view);
+      for (const section of document.querySelectorAll(".view")) section.classList.toggle("active", section.id === "view-" + view);
+      if (view === "history") refreshRuns();
+      if (view === "overview") refreshLogs();
     }
-    async function saveConfig() {
-      const cfg = {};
-      for (const key of configKeys) {
-        const el = $(key);
-        if (el) cfg[key] = el.value;
-      }
-      await api("/api/config", { method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(cfg) });
+    function setRunMessage(message, error) {
+      $("runMessage").textContent = message;
+      $("runMessage").className = "run-message" + (error ? " error" : "");
     }
-    function setFieldDisabled(key, disabled) {
-      const field = $("field_" + key);
-      const el = $(key);
-      if (field) field.dataset.disabled = disabled ? "true" : "false";
-      if (el) el.disabled = disabled;
-    }
-    function updateConfigDependencies() {
-      const ssoOn = $("OUTPUT_SSO_ENABLED").value === "1";
-      const grok2apiOn = ssoOn && $("OUTPUT_GROK2API_SSO_ENABLED").value === "1";
-      const cpaOn = $("OUTPUT_CPA_ENABLED").value === "1";
-      const uploadOn = cpaOn && $("CPA_UPLOAD_ENABLED").value === "1";
-      setFieldDisabled("OUTPUT_GROK2API_SSO_ENABLED", !ssoOn);
-      setFieldDisabled("CPA_UPLOAD_ENABLED", !cpaOn);
-      $("summarySSO").textContent = ssoOn ? "开启" : "关闭";
-      $("summaryGrok2API").textContent = grok2apiOn ? "开启" : "不生效";
-      $("summaryCPA").textContent = cpaOn ? "开启" : "关闭";
-      $("summaryUpload").textContent = uploadOn ? "开启" : "不生效";
-      $("flowSummary").textContent = "当前生效：SSO " + (ssoOn ? "输出" : "不输出") + "，grok2api SSO " + (grok2apiOn ? "输出" : "不输出") + "，CPA " + (cpaOn ? "输出并探活" : "不输出，跳过 OAuth/探活") + "。";
-      $("cpaSummary").textContent = cpaOn ? "当前生效：CPA 上传 " + (uploadOn ? "开启" : "关闭") + "。" : "当前生效：CPA 文件输出关闭，自动上传不会执行。";
-    }
-
-    async function saveWithToast(id) {
-      setToast(id, "正在保存...");
-      try {
-        await saveConfig();
-        updateConfigDependencies();
-        setToast(id, "配置已保存，新启动的注册任务会使用这些配置。");
-      } catch (err) {
-        setToast(id, err.message);
-      }
-    }
-
-    $("controlForm").addEventListener("submit", async (event) => {
-      event.preventDefault();
-      setToast("toast", "正在启动...");
-      try {
-        await api("/api/start", { method: "POST", headers: {"Content-Type": "application/x-www-form-urlencoded"}, body: new URLSearchParams({ target: $("targetInput").value, thread: $("threadInput").value }) });
-        setToast("toast", "已启动");
-        await refreshAll();
-      } catch (err) {
-        setToast("toast", err.message);
-      }
-    });
-    $("stopButton").addEventListener("click", async () => {
-      setToast("toast", "正在停止...");
-      try {
-        await api("/api/stop", { method: "POST" });
-        setToast("toast", "已停止");
-        await refreshAll();
-      } catch (err) {
-        setToast("toast", err.message);
-      }
-    });
-    $("saveFlow").addEventListener("click", () => saveWithToast("flowToast"));
-    $("saveMail").addEventListener("click", () => saveWithToast("mailToast"));
-    $("saveCPA").addEventListener("click", () => saveWithToast("cpaToast"));
-    $("checkCPA").addEventListener("click", async () => {
-      setToast("cpaToast", "正在检测 CPA...");
-      try {
-        await saveConfig();
-        const result = await api("/api/check/cpa", { method: "POST" });
-        setToast("cpaToast", result.ok ? "CPA 检测通过，HTTP " + result.status : "CPA 检测失败：" + (result.error || ("HTTP " + result.status)));
-      } catch (err) {
-        setToast("cpaToast", err.message);
-      }
-    });
-    $("historySearch").addEventListener("input", (event) => { state.query = event.target.value; renderRuns(); });
-    $("refreshHistory").addEventListener("click", refreshRuns);
-    for (const button of document.querySelectorAll(".nav-button, .nav-jump")) {
-      button.addEventListener("click", () => showView(button.dataset.view));
-    }
-    for (const key of ["OUTPUT_SSO_ENABLED", "OUTPUT_GROK2API_SSO_ENABLED", "OUTPUT_CPA_ENABLED", "CPA_UPLOAD_ENABLED"]) {
-      const el = $(key);
-      if (el) el.addEventListener("change", updateConfigDependencies);
-    }
-    async function refreshLive() {
-      await Promise.allSettled([refreshStatus(), refreshLogs()]);
-    }
-    async function refreshAll() {
-      await Promise.allSettled([refreshStatus(), refreshLogs(), refreshRuns()]);
+    function updatePolling() {
+      if (state.status === "running" && !state.pollTimer) state.pollTimer = window.setInterval(pollRunning, 3000);
+      if (state.status !== "running" && state.pollTimer) { window.clearInterval(state.pollTimer); state.pollTimer = 0; }
     }
     async function pollRunning() {
-      if (state.status !== "running") {
-        updatePolling();
-        return;
-      }
+      if (state.status !== "running") return updatePolling();
       const jobs = [refreshStatus()];
-      if (state.view === "live") jobs.push(refreshLogs());
+      if (state.view === "overview") jobs.push(refreshLogs());
       if (state.view === "history") jobs.push(refreshRuns());
       await Promise.allSettled(jobs);
     }
-    function updatePolling() {
-      if (state.status === "running" && !state.pollTimer) {
-        state.pollTimer = window.setInterval(pollRunning, 3000);
-      }
-      if (state.status !== "running" && state.pollTimer) {
-        window.clearInterval(state.pollTimer);
-        state.pollTimer = 0;
-      }
-    }
-    loadConfig();
-    refreshAll();
+
+    renderConfigUI();
+    for (const button of document.querySelectorAll(".nav-button, .nav-jump")) button.addEventListener("click", () => showView(button.dataset.view));
+    $("configSearch").addEventListener("input", (event) => { state.configQuery = event.target.value; filterConfig(); });
+    $("historySearch").addEventListener("input", (event) => { state.query = event.target.value; renderRuns(); });
+    $("refreshHistory").addEventListener("click", refreshRuns);
+    $("saveConfig").addEventListener("click", saveConfig);
+    $("checkCPA").addEventListener("click", async () => {
+      const saved = await saveConfig();
+      if (!saved && configKeys.some((key) => fieldValue(key) !== state.savedConfig[key])) return;
+      $("saveState").textContent = "正在检测 CPA...";
+      try {
+        const result = await api("/api/check/cpa", { method: "POST" });
+        $("saveState").textContent = result.ok ? `CPA 检测通过，HTTP ${result.status}` : `CPA 检测失败：${result.error || ("HTTP " + result.status)}`;
+        $("saveState").className = "save-state" + (result.ok ? "" : " error");
+      } catch (error) { $("saveState").textContent = "CPA 检测失败：" + error.message; $("saveState").className = "save-state error"; }
+    });
+    $("controlForm").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      if (!event.currentTarget.reportValidity()) return;
+      setRunMessage("正在启动任务...");
+      try {
+        await api("/api/start", { method: "POST", headers: {"Content-Type":"application/x-www-form-urlencoded"}, body: new URLSearchParams({ target: $("targetInput").value, thread: $("threadInput").value }) });
+        setRunMessage("任务已启动");
+        await Promise.allSettled([refreshStatus(), refreshLogs(), refreshRuns()]);
+      } catch (error) { setRunMessage(error.message, true); }
+    });
+    $("stopButton").addEventListener("click", async () => {
+      setRunMessage("正在停止任务...");
+      try { await api("/api/stop", { method: "POST" }); setRunMessage("任务已停止"); await Promise.allSettled([refreshStatus(), refreshLogs(), refreshRuns()]); }
+      catch (error) { setRunMessage(error.message, true); }
+    });
+    window.addEventListener("beforeunload", (event) => {
+      if (configKeys.some((key) => fieldValue(key) !== state.savedConfig[key])) { event.preventDefault(); event.returnValue = ""; }
+    });
+    Promise.allSettled([loadConfig(), refreshStatus(), refreshLogs(), refreshRuns()]);
   </script>
 </body>
 </html>

@@ -20,7 +20,7 @@ type UploadConfig struct {
 	Key          string
 	TimeoutSec   int
 	Retries      int
-	NameTemplate string // {email}.json or {provider}-{email}.json
+	NameTemplate string // {email} or {provider}-{email}; .json is added automatically
 	Verify       bool   // GET /auth-files after upload
 	Mode         string // multipart | json (default multipart)
 }
@@ -31,7 +31,7 @@ func DefaultUploadConfig() UploadConfig {
 		BaseURL:      "http://localhost:8317/v0/management",
 		TimeoutSec:   30,
 		Retries:      2,
-		NameTemplate: "{email}.json",
+		NameTemplate: "{email}",
 		Verify:       true,
 		Mode:         "multipart",
 	}
@@ -135,9 +135,7 @@ func (u *Uploader) Enabled() bool {
 }
 
 func UploadName(doc Document, tmpl string) string {
-	if tmpl == "" {
-		tmpl = "{email}.json"
-	}
+	tmpl = NormalizeUploadNameTemplate(tmpl)
 	email := strings.TrimSpace(doc.Email)
 	if email == "" {
 		email = "unknown"
@@ -162,6 +160,28 @@ func UploadName(doc Document, tmpl string) string {
 		name += ".json"
 	}
 	return name
+}
+
+// NormalizeUploadNameTemplate repairs legacy shell-expanded templates and
+// keeps the extension out of the configurable part of the filename.
+func NormalizeUploadNameTemplate(tmpl string) string {
+	tmpl = strings.Trim(strings.TrimSpace(tmpl), `"'`)
+	if tmpl == "" {
+		return "{email}"
+	}
+	for _, placeholder := range []string{"email", "provider", "sub"} {
+		tmpl = strings.ReplaceAll(tmpl, "{"+placeholder+".json}", "{"+placeholder+"}")
+	}
+	for strings.HasSuffix(tmpl, "}") && strings.Count(tmpl, "}") > strings.Count(tmpl, "{") {
+		tmpl = strings.TrimSuffix(tmpl, "}")
+	}
+	for strings.HasSuffix(strings.ToLower(tmpl), ".json") {
+		tmpl = tmpl[:len(tmpl)-len(".json")]
+	}
+	if strings.TrimSpace(tmpl) == "" {
+		return "{email}"
+	}
+	return tmpl
 }
 
 func sanitizePart(s string) string {

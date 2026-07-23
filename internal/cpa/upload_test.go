@@ -14,12 +14,12 @@ import (
 
 func TestNormalizeManagementBase(t *testing.T) {
 	cases := map[string]string{
-		"http://cli-proxy-api:8317":                    "http://127.0.0.1:8317/v0/management",
-		"http://cli-proxy-api:8317/":                   "http://127.0.0.1:8317/v0/management",
-		"http://cli-proxy-api:8317/v0/management":      "http://127.0.0.1:8317/v0/management",
-		"http://127.0.0.1:8317":                        "http://127.0.0.1:8317/v0/management",
-		"http://127.0.0.1:8317/v0/management":          "http://127.0.0.1:8317/v0/management",
-		"http://localhost:8317/v0/management":          "http://localhost:8317/v0/management",
+		"http://cli-proxy-api:8317":               "http://127.0.0.1:8317/v0/management",
+		"http://cli-proxy-api:8317/":              "http://127.0.0.1:8317/v0/management",
+		"http://cli-proxy-api:8317/v0/management": "http://127.0.0.1:8317/v0/management",
+		"http://127.0.0.1:8317":                   "http://127.0.0.1:8317/v0/management",
+		"http://127.0.0.1:8317/v0/management":     "http://127.0.0.1:8317/v0/management",
+		"http://localhost:8317/v0/management":     "http://localhost:8317/v0/management",
 	}
 	for in, want := range cases {
 		got := NormalizeManagementBase(in)
@@ -31,7 +31,7 @@ func TestNormalizeManagementBase(t *testing.T) {
 
 func TestUploadName(t *testing.T) {
 	doc := Document{Email: "a@b.com", Sub: "sub1"}
-	n := UploadName(doc, "{email}.json")
+	n := UploadName(doc, "{email}")
 	if n != "a@b.com.json" {
 		t.Fatalf("name=%s", n)
 	}
@@ -42,6 +42,22 @@ func TestUploadName(t *testing.T) {
 	n3 := UploadName(Document{Email: "x"}, "")
 	if !strings.HasSuffix(n3, ".json") {
 		t.Fatalf("suffix: %s", n3)
+	}
+}
+
+func TestNormalizeUploadNameTemplate(t *testing.T) {
+	for input, want := range map[string]string{
+		"":                        "{email}",
+		"{email}":                 "{email}",
+		"{email}.json":            "{email}",
+		"{email.json}":            "{email}",
+		"{email}.json.json}":      "{email}",
+		"{provider}-{email}":      "{provider}-{email}",
+		"{provider}-{email}.JSON": "{provider}-{email}",
+	} {
+		if got := NormalizeUploadNameTemplate(input); got != want {
+			t.Errorf("NormalizeUploadNameTemplate(%q) = %q, want %q", input, got, want)
+		}
 	}
 }
 
@@ -94,7 +110,7 @@ func TestUploadMultipart(t *testing.T) {
 		Key:          "test-key",
 		TimeoutSec:   5,
 		Retries:      0,
-		NameTemplate: "{email}.json",
+		NameTemplate: "{email}",
 		Verify:       true,
 		Mode:         "multipart",
 	}, func(string, ...any) {})

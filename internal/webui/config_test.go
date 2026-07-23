@@ -15,7 +15,7 @@ import (
 func TestConfigRoundTripPreservesEditableValues(t *testing.T) {
 	dir := t.TempDir()
 	app := New(AppConfig{Home: dir, Username: "admin", Password: "secret"})
-	body := strings.NewReader(`{"CPA_UPLOAD_ENABLED":"1","CPA_MANAGEMENT_BASE":"http://host.docker.internal:8317/v0/management","CPA_MANAGEMENT_KEY":"key-123","CPA_UPLOAD_NAME_TEMPLATE":"{email}.json","EMAIL_MODE":"testmail","EMAIL_DOMAIN":"example.com","EMAIL_API":"http://mail:8080","TESTMAIL_API_KEY":"tm-key","TESTMAIL_NAMESPACE":"tm-ns","TESTMAIL_DOMAIN":"inbox.testmail.app","CLEARANCE_ENABLED":"1","CLEARANCE_MODE":"auto","CLEARANCE_AUTO_STOP":"0","CF_IMPERSONATE":"chrome_131","CF_IMPERSONATE_FALLBACK":"chrome_124,chrome_120","TURNSTILE_PROVIDER":"browser","TURNSTILE_MODE":"offscreen","LITE_SOLVER_URL":"http://solver:5072","OUTPUT_SSO_ENABLED":"0","OUTPUT_GROK2API_SSO_ENABLED":"0","OUTPUT_CPA_ENABLED":"0","HTTP_POOL_SIZE":"12","PHYSICAL_CAP":"2","TURNSTILE_WORKERS":"3","TEMPMAIL_LOL_RETRIES":"42","TEMPMAIL_LOL_MIN_INTERVAL_MS":"2100","OAUTH_MIN_INTERVAL_SEC":"5","OAUTH_RETRY_SEC":"45","OAUTH_WORKERS":"1","PROBE_ENABLED":"0","PROBE_WARMUP_SEC":"2.5"}`)
+	body := strings.NewReader(`{"CPA_UPLOAD_ENABLED":"1","CPA_MANAGEMENT_BASE":"http://host.docker.internal:8317/v0/management","CPA_MANAGEMENT_KEY":"key-123","CPA_UPLOAD_TIMEOUT_SEC":"25","CPA_UPLOAD_RETRIES":"4","CPA_UPLOAD_NAME_TEMPLATE":"{email}.json","CPA_UPLOAD_VERIFY":"0","CPA_UPLOAD_MODE":"json","EMAIL_MODE":"testmail","EMAIL_DOMAIN":"example.com","EMAIL_API":"http://mail:8080","TESTMAIL_API_KEY":"tm-key","TESTMAIL_NAMESPACE":"tm-ns","TESTMAIL_DOMAIN":"inbox.testmail.app","CLEARANCE_ENABLED":"1","CLEARANCE_MODE":"auto","CLEARANCE_AUTO_STOP":"0","CLEARANCE_COMPOSE_DIR":"C:/clearance","CF_IMPERSONATE":"chrome_131","CF_IMPERSONATE_FALLBACK":"chrome_124,chrome_120","REGISTER_PROXY":"http://register-proxy:8118","FLARESOLVERR_URL":"http://flaresolverr:8191","CLEARANCE_PROXY":"http://clearance-proxy:8118","CLEARANCE_URLS":"https://accounts.x.ai,https://x.ai","TURNSTILE_PROVIDER":"browser","TURNSTILE_MODE":"offscreen","LITE_SOLVER_URL":"http://solver:5072","PROTOCOL_HTTP":"0","OUTPUT_SSO_ENABLED":"0","OUTPUT_GROK2API_SSO_ENABLED":"0","OUTPUT_CPA_ENABLED":"0","HTTP_POOL_SIZE":"12","PHYSICAL_CAP":"2","TURNSTILE_WORKERS":"3","TEMPMAIL_LOL_RETRIES":"42","TEMPMAIL_LOL_MIN_INTERVAL_MS":"2100","OAUTH_MIN_INTERVAL_SEC":"5","OAUTH_RETRY_SEC":"45","OAUTH_WORKERS":"1","PROBE_ENABLED":"0","PROBE_WARMUP_SEC":"2.5","HTTPS_PROXY":"http://https-proxy:8118","HTTP_PROXY":"http://http-proxy:8118","NO_PROXY":"localhost,solver"}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/config", body)
 	req.Header.Set("Content-Type", "application/json")
 	req.SetBasicAuth("admin", "secret")
@@ -34,15 +34,25 @@ func TestConfigRoundTripPreservesEditableValues(t *testing.T) {
 	for _, want := range []string{
 		"CPA_MANAGEMENT_KEY=key-123",
 		"CPA_UPLOAD_ENABLED=1",
-		"CPA_UPLOAD_NAME_TEMPLATE={email}.json",
+		"CPA_UPLOAD_TIMEOUT_SEC=25",
+		"CPA_UPLOAD_RETRIES=4",
+		"CPA_UPLOAD_NAME_TEMPLATE={email}",
+		"CPA_UPLOAD_VERIFY=0",
+		"CPA_UPLOAD_MODE=json",
 		"EMAIL_MODE=testmail",
 		"CLEARANCE_MODE=auto",
 		"CLEARANCE_AUTO_STOP=0",
+		"CLEARANCE_COMPOSE_DIR=C:/clearance",
 		"CF_IMPERSONATE=chrome_131",
 		"CF_IMPERSONATE_FALLBACK=chrome_124,chrome_120",
+		"REGISTER_PROXY=http://register-proxy:8118",
+		"FLARESOLVERR_URL=http://flaresolverr:8191",
+		"CLEARANCE_PROXY=http://clearance-proxy:8118",
+		"CLEARANCE_URLS=https://accounts.x.ai,https://x.ai",
 		"TURNSTILE_PROVIDER=browser",
 		"TURNSTILE_MODE=offscreen",
 		"LITE_SOLVER_URL=http://solver:5072",
+		"PROTOCOL_HTTP=0",
 		"TESTMAIL_API_KEY=tm-key",
 		"TESTMAIL_NAMESPACE=tm-ns",
 		"TESTMAIL_DOMAIN=inbox.testmail.app",
@@ -59,6 +69,9 @@ func TestConfigRoundTripPreservesEditableValues(t *testing.T) {
 		"OAUTH_WORKERS=1",
 		"PROBE_ENABLED=0",
 		"PROBE_WARMUP_SEC=2.5",
+		"HTTPS_PROXY=http://https-proxy:8118",
+		"HTTP_PROXY=http://http-proxy:8118",
+		"NO_PROXY=localhost,solver",
 	} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("config missing %q in:\n%s", want, text)
@@ -106,6 +119,38 @@ func TestDownloadRunReturnsZip(t *testing.T) {
 	}
 }
 
+func TestDownloadGrok2APIReturnsRawTokensFile(t *testing.T) {
+	dir := t.TempDir()
+	runID := "20260722-010203"
+	grok2apiDir := filepath.Join(dir, "outputs", runID, "grok2api")
+	if err := os.MkdirAll(grok2apiDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	want := "sso-token-one\nsso-token-two\n"
+	if err := os.WriteFile(filepath.Join(grok2apiDir, "tokens.txt"), []byte(want), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	app := New(AppConfig{Home: dir, Username: "admin", Password: "secret"})
+	req := httptest.NewRequest(http.MethodGet, "/api/runs/download?id="+runID+"&category=grok2api", nil)
+	req.SetBasicAuth("admin", "secret")
+	res := httptest.NewRecorder()
+
+	app.Handler().ServeHTTP(res, req)
+
+	if res.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", res.Code, res.Body.String())
+	}
+	if got := res.Header().Get("Content-Type"); !strings.HasPrefix(got, "text/plain") {
+		t.Fatalf("Content-Type = %q, want text/plain", got)
+	}
+	if got := res.Header().Get("Content-Disposition"); got != `attachment; filename="tokens.txt"` {
+		t.Fatalf("Content-Disposition = %q", got)
+	}
+	if got := res.Body.String(); got != want {
+		t.Fatalf("body = %q, want %q", got, want)
+	}
+}
+
 func TestRunDetailIncludesFilesAndLog(t *testing.T) {
 	dir := t.TempDir()
 	runID := "20260722-010203"
@@ -139,7 +184,7 @@ func TestRunDetailIncludesFilesAndLog(t *testing.T) {
 		t.Fatalf("status = %d body=%s", res.Code, res.Body.String())
 	}
 	body := res.Body.String()
-	for _, want := range []string{"tokens.txt", "xai-test.json", "line two", `"grok2api_sso_count":1`} {
+	for _, want := range []string{"tokens.txt", "xai-test.json", "line two", `"grok2api_sso_count":1`, `"download_grok2api_url"`} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("detail missing %q in %s", want, body)
 		}

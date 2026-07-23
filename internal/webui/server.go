@@ -19,6 +19,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/grok-free-register/grok-reg/internal/cpa"
 	"github.com/grok-free-register/grok-reg/internal/state"
 )
 
@@ -48,6 +49,7 @@ type runSummary struct {
 	ModifiedAt     string `json:"modified_at"`
 	Download       string `json:"download_url"`
 	DownloadSSO    string `json:"download_sso_url"`
+	DownloadGrok2  string `json:"download_grok2api_url"`
 	DownloadCPA    string `json:"download_cpa_url"`
 	DownloadBad    string `json:"download_discarded_url"`
 	DownloadLog    string `json:"download_log_url"`
@@ -83,6 +85,7 @@ var editableConfigKeys = []string{
 	"CLEARANCE_ENABLED",
 	"CLEARANCE_MODE",
 	"CLEARANCE_AUTO_STOP",
+	"CLEARANCE_COMPOSE_DIR",
 	"CF_IMPERSONATE",
 	"CF_IMPERSONATE_FALLBACK",
 	"REGISTER_PROXY",
@@ -289,6 +292,7 @@ func (a *App) config(w http.ResponseWriter, r *http.Request) {
 				cfg[key] = strings.TrimSpace(value)
 			}
 		}
+		cfg["CPA_UPLOAD_NAME_TEMPLATE"] = cpa.NormalizeUploadNameTemplate(cfg["CPA_UPLOAD_NAME_TEMPLATE"])
 		if err := a.writeConfig(cfg); err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
 			return
@@ -348,6 +352,10 @@ func (a *App) downloadRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	root := filepath.Join(a.cfg.Home, "outputs", id)
+	if category == "grok2api" {
+		a.downloadGrok2API(w, r, root)
+		return
+	}
 	zipRoot := root
 	namePrefix := id
 	if category != "" {
@@ -402,6 +410,17 @@ func (a *App) downloadRun(w http.ResponseWriter, r *http.Request) {
 		_, _ = io.Copy(dst, src)
 		return nil
 	})
+}
+
+func (a *App) downloadGrok2API(w http.ResponseWriter, r *http.Request, root string) {
+	path := filepath.Join(root, "grok2api", "tokens.txt")
+	if st, err := os.Stat(path); err != nil || st.IsDir() {
+		http.NotFound(w, r)
+		return
+	}
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set("Content-Disposition", `attachment; filename="tokens.txt"`)
+	http.ServeFile(w, r, path)
 }
 
 func (a *App) downloadLog(w http.ResponseWriter, r *http.Request, id string) {
@@ -514,7 +533,7 @@ func (a *App) listRuns() ([]runSummary, error) {
 	if err != nil {
 		return nil, err
 	}
-	var runs []runSummary
+	runs := make([]runSummary, 0)
 	for _, entry := range entries {
 		if !entry.IsDir() {
 			continue
@@ -558,6 +577,7 @@ func (a *App) summarizeRun(id, dir string, mod time.Time) runSummary {
 		ModifiedAt:     mod.Format(time.RFC3339),
 		Download:       "/api/runs/download?id=" + id,
 		DownloadSSO:    "/api/runs/download?id=" + id + "&category=sso",
+		DownloadGrok2:  "/api/runs/download?id=" + id + "&category=grok2api",
 		DownloadCPA:    "/api/runs/download?id=" + id + "&category=cpa",
 		DownloadBad:    "/api/runs/download?id=" + id + "&category=discarded",
 		DownloadLog:    "/api/runs/download?id=" + id + "&category=log",
@@ -756,6 +776,7 @@ func (a *App) readConfig() map[string]string {
 	for key, value := range parseEnvFile(string(data)) {
 		cfg[key] = value
 	}
+	cfg["CPA_UPLOAD_NAME_TEMPLATE"] = cpa.NormalizeUploadNameTemplate(cfg["CPA_UPLOAD_NAME_TEMPLATE"])
 	return cfg
 }
 
@@ -786,6 +807,7 @@ func defaultWebConfig() map[string]string {
 		"CLEARANCE_ENABLED":            "1",
 		"CLEARANCE_MODE":               "auto",
 		"CLEARANCE_AUTO_STOP":          "0",
+		"CLEARANCE_COMPOSE_DIR":        "",
 		"CF_IMPERSONATE":               "chrome_131",
 		"CF_IMPERSONATE_FALLBACK":      "chrome_124,chrome_120",
 		"REGISTER_PROXY":               "http://privoxy:8118",
@@ -799,11 +821,11 @@ func defaultWebConfig() map[string]string {
 		"HTTP_POOL_SIZE":               "8",
 		"TEMPMAIL_LOL_RETRIES":         "30",
 		"TEMPMAIL_LOL_MIN_INTERVAL_MS": "1500",
-		"OAUTH_MIN_INTERVAL_SEC":       "4",
-		"OAUTH_RETRY_SEC":              "45",
+		"OAUTH_MIN_INTERVAL_SEC":       "6",
+		"OAUTH_RETRY_SEC":              "60",
 		"OAUTH_WORKERS":                "0",
 		"PROBE_ENABLED":                "1",
-		"PROBE_WARMUP_SEC":             "1.5",
+		"PROBE_WARMUP_SEC":             "5",
 		"HTTPS_PROXY":                  "http://privoxy:8118",
 		"HTTP_PROXY":                   "http://privoxy:8118",
 		"NO_PROXY":                     "127.0.0.1,localhost,privoxy,flaresolverr,warp-proxy",
@@ -817,7 +839,7 @@ func defaultWebConfig() map[string]string {
 		"CPA_MANAGEMENT_KEY":           "",
 		"CPA_UPLOAD_TIMEOUT_SEC":       "30",
 		"CPA_UPLOAD_RETRIES":           "2",
-		"CPA_UPLOAD_NAME_TEMPLATE":     "{email}.json",
+		"CPA_UPLOAD_NAME_TEMPLATE":     "{email}",
 		"CPA_UPLOAD_VERIFY":            "1",
 		"CPA_UPLOAD_MODE":              "multipart",
 	}
