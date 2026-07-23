@@ -56,6 +56,26 @@ func TestIndexShowsRedesignedHistoryUI(t *testing.T) {
 	}
 }
 
+func TestIndexExposesEveryEditableConfigKey(t *testing.T) {
+	dir := t.TempDir()
+	app := New(AppConfig{Home: dir, Username: "admin", Password: "secret"})
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.SetBasicAuth("admin", "secret")
+	res := httptest.NewRecorder()
+
+	app.Handler().ServeHTTP(res, req)
+
+	if res.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", res.Code, http.StatusOK)
+	}
+	body := res.Body.String()
+	for _, key := range editableConfigKeys {
+		if !strings.Contains(body, `key: "`+key+`"`) {
+			t.Errorf("config key %s is editable by the API but missing from the UI schema", key)
+		}
+	}
+}
+
 func TestAuthorizedLogEndpointReturnsLatestLog(t *testing.T) {
 	dir := t.TempDir()
 	logs := filepath.Join(dir, "logs")
@@ -87,6 +107,26 @@ func TestAuthorizedLogEndpointReturnsLatestLog(t *testing.T) {
 	}
 	if got := res.Body.String(); !strings.Contains(got, "line two") || strings.Contains(got, "line one") {
 		t.Fatalf("body = %q, want only latest tail line", got)
+	}
+}
+
+func TestEmptyRunsEndpointReturnsArray(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "outputs"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	app := New(AppConfig{Home: dir, Username: "admin", Password: "secret"})
+	req := httptest.NewRequest(http.MethodGet, "/api/runs", nil)
+	req.SetBasicAuth("admin", "secret")
+	res := httptest.NewRecorder()
+
+	app.Handler().ServeHTTP(res, req)
+
+	if res.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", res.Code, http.StatusOK)
+	}
+	if got := strings.TrimSpace(res.Body.String()); got != "[]" {
+		t.Fatalf("body = %s, want []", got)
 	}
 }
 

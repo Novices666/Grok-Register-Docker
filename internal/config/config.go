@@ -130,7 +130,7 @@ func Defaults() Config {
 		CPAManagementBase:     "http://localhost:8317/v0/management",
 		CPAUploadTimeoutSec:   30,
 		CPAUploadRetries:      2,
-		CPAUploadNameTemplate: "{email}.json",
+		CPAUploadNameTemplate: "{email}",
 		CPAUploadVerify:       true,
 		CPAUploadMode:         "multipart",
 	}
