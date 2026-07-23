@@ -33,9 +33,18 @@
     }
 
     * { box-sizing: border-box; }
-    html { min-width: 320px; background: var(--canvas); }
+    html {
+      min-width: 320px;
+      height: 100%;
+      background: var(--canvas);
+    }
     body {
       margin: 0;
+      height: 100%;
+      height: 100dvh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
       color: var(--ink);
       background: var(--canvas);
       font: 14px/1.5 "Segoe UI", "Microsoft YaHei UI", system-ui, sans-serif;
@@ -76,9 +85,9 @@
     input:disabled, select:disabled, textarea:disabled { background: #edf1f3; color: var(--muted); cursor: not-allowed; }
 
     .app-header {
-      position: sticky;
-      top: 0;
+      position: relative;
       z-index: 30;
+      flex: 0 0 auto;
       border-bottom: 1px solid #344149;
       background: var(--graphite);
       color: #f5f8f9;
@@ -128,8 +137,19 @@
     .state-dot.running { background: #55c4a5; box-shadow: 0 0 0 4px rgba(85, 196, 165, .15); }
     .state-dot.error { background: #ef746a; box-shadow: 0 0 0 4px rgba(239, 116, 106, .14); }
 
-    .shell { width: min(1500px, 100%); margin: 0 auto; padding: 14px 18px 28px; }
+    .shell {
+      width: min(1500px, 100%);
+      flex: 1 1 auto;
+      min-height: 0;
+      margin: 0 auto;
+      padding: 12px 18px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      overflow: hidden;
+    }
     .run-dock {
+      flex: 0 0 auto;
       display: grid;
       grid-template-columns: minmax(280px, .9fr) minmax(430px, 1.45fr) minmax(340px, .95fr);
       border: 1px solid var(--line-strong);
@@ -175,27 +195,62 @@
     .run-message { grid-column: 1 / -1; min-height: 18px; color: var(--ink-soft); font-size: 12px; overflow-wrap: anywhere; }
     .run-message.error { color: var(--red); }
 
-    .view { display: none; margin-top: 14px; }
-    .view.active { display: block; }
-    .overview-grid { display: grid; grid-template-columns: minmax(0, 1.65fr) minmax(320px, .75fr); gap: 14px; align-items: start; }
-    .side-stack { display: grid; gap: 14px; }
-    .panel { border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow); overflow: hidden; }
+    .view {
+      display: none;
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow: hidden;
+    }
+    .view.active { display: flex; flex-direction: column; }
+    .overview-grid {
+      flex: 1 1 auto;
+      min-height: 0;
+      display: grid;
+      grid-template-columns: minmax(0, 1.65fr) minmax(320px, .75fr);
+      gap: 12px;
+      align-items: stretch;
+    }
+    .side-stack {
+      min-height: 0;
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+      gap: 12px;
+    }
+    .panel {
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--surface);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+    .overview-grid > .panel { min-height: 0; height: 100%; }
     .panel-head {
-      min-height: 50px;
+      flex: 0 0 auto;
+      min-height: 46px;
       display: flex;
       align-items: center;
       justify-content: space-between;
       gap: 12px;
-      padding: 11px 14px;
+      padding: 10px 14px;
       border-bottom: 1px solid var(--line);
       background: var(--surface-raised);
     }
     .panel-title { margin: 0; font: 700 15px/1.2 Bahnschrift, "Segoe UI", sans-serif; }
     .panel-meta { min-width: 0; overflow: hidden; color: var(--muted); font: 11px/1.4 "Cascadia Mono", Consolas, monospace; text-overflow: ellipsis; white-space: nowrap; }
-    .terminal { background: var(--terminal); }
+    .terminal {
+      flex: 1 1 auto;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      background: var(--terminal);
+    }
     pre {
-      min-height: 610px;
-      max-height: calc(100vh - 260px);
+      flex: 1 1 auto;
+      min-height: 0;
+      max-height: none;
       margin: 0;
       overflow: auto;
       padding: 15px;
@@ -204,16 +259,20 @@
       white-space: pre-wrap;
       overflow-wrap: anywhere;
     }
-    .pipeline { padding: 6px 14px 10px; }
+    .pipeline {
+      flex: 0 0 auto;
+      padding: 4px 14px 8px;
+      overflow: auto;
+    }
     .stage {
       position: relative;
       display: grid;
       grid-template-columns: 28px minmax(0, 1fr) auto;
       align-items: center;
       gap: 9px;
-      min-height: 55px;
+      min-height: 48px;
     }
-    .stage:not(:last-child)::after { content: ""; position: absolute; left: 13px; top: 38px; bottom: -17px; width: 2px; background: var(--line); }
+    .stage:not(:last-child)::after { content: ""; position: absolute; left: 13px; top: 34px; bottom: -14px; width: 2px; background: var(--line); }
     .stage-node {
       position: relative;
       z-index: 1;
@@ -234,12 +293,18 @@
     .stage-state { color: var(--muted); font-size: 11px; font-weight: 700; }
     .stage.active .stage-state { color: var(--teal); }
     .stage.skipped .stage-state { color: var(--amber); }
-    .recent-list, .run-list { display: grid; align-content: start; }
+    .recent-list, .run-list {
+      flex: 1 1 auto;
+      min-height: 0;
+      display: grid;
+      align-content: start;
+      overflow: auto;
+    }
     .recent-list .run-card { border-bottom: 1px solid var(--line); }
     .recent-list .run-card:last-child { border-bottom: 0; }
     .run-card {
       width: 100%;
-      min-height: 78px;
+      min-height: 72px;
       display: grid;
       gap: 7px;
       border: 0;
@@ -258,33 +323,187 @@
     .chip { border: 1px solid var(--line); border-radius: 3px; padding: 2px 6px; background: var(--surface-soft); color: var(--ink-soft); font-size: 10px; font-weight: 700; }
     .empty { padding: 18px; color: var(--muted); font-size: 13px; }
 
-    .history-panel { min-height: 680px; }
+    .history-panel {
+      flex: 1 1 auto;
+      min-height: 0;
+      height: 100%;
+    }
     .history-tools { display: flex; align-items: center; gap: 8px; }
     .history-tools input { min-width: 260px; }
-    .history-layout { display: grid; grid-template-columns: 340px minmax(0, 1fr); min-height: 628px; }
-    .history-layout > .run-list { max-height: 760px; overflow: auto; border-right: 1px solid var(--line); background: var(--surface-soft); }
+    .history-layout {
+      flex: 1 1 auto;
+      min-height: 0;
+      display: grid;
+      grid-template-columns: 340px minmax(0, 1fr);
+    }
+    .history-layout > .run-list {
+      max-height: none;
+      overflow: auto;
+      border-right: 1px solid var(--line);
+      background: var(--surface-soft);
+    }
     .history-layout > .run-list .run-card { border-bottom: 1px solid var(--line); }
-    .run-detail { min-width: 0; display: grid; align-content: start; gap: 13px; padding: 14px; }
+    .run-detail {
+      min-width: 0;
+      min-height: 0;
+      overflow: auto;
+      display: grid;
+      align-content: start;
+      gap: 13px;
+      padding: 14px;
+    }
     .detail-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
     .detail-heading h2 { margin: 0; font: 700 19px/1.2 Bahnschrift, "Segoe UI", sans-serif; overflow-wrap: anywhere; }
     .detail-summary { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 7px; }
-    .detail-actions { display: flex; flex-wrap: wrap; gap: 7px; }
+    .detail-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; }
+    .detail-message { min-height: 16px; margin: 0; color: var(--ink-soft); font-size: 12px; }
+    .detail-message.error { color: var(--red); }
     .download { min-height: 36px; display: inline-flex; align-items: center; justify-content: center; border: 1px solid transparent; border-radius: var(--radius); padding: 7px 11px; background: var(--teal); color: #fff; font-weight: 700; text-decoration: none; white-space: nowrap; }
+    .more-downloads { position: relative; }
+    .more-downloads > summary {
+      list-style: none;
+      min-height: 36px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid var(--line-strong);
+      border-radius: var(--radius);
+      padding: 7px 11px;
+      background: #fff;
+      color: var(--ink);
+      font-weight: 700;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .more-downloads > summary::-webkit-details-marker { display: none; }
+    .more-downloads[open] > summary { border-color: var(--teal); color: var(--teal); background: var(--teal-soft); }
+    .more-downloads-menu {
+      position: absolute;
+      top: calc(100% + 4px);
+      left: 0;
+      z-index: 20;
+      min-width: 180px;
+      display: grid;
+      border: 1px solid var(--line-strong);
+      border-radius: var(--radius);
+      background: #fff;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+    .more-downloads-menu a {
+      min-height: 36px;
+      display: flex;
+      align-items: center;
+      padding: 7px 12px;
+      color: var(--ink);
+      font-weight: 650;
+      text-decoration: none;
+      border-bottom: 1px solid var(--line);
+    }
+    .more-downloads-menu a:last-child { border-bottom: 0; }
+    .more-downloads-menu a:hover { background: var(--surface-soft); }
     .file-groups { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
-    .file-group { border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
-    .file-group header { display: flex; justify-content: space-between; gap: 8px; padding: 8px 10px; border-bottom: 1px solid var(--line); background: var(--surface-soft); }
+    .file-group {
+      display: flex;
+      flex-direction: column;
+      max-height: 280px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+    .file-group header {
+      flex: 0 0 auto;
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 8px 10px;
+      border-bottom: 1px solid var(--line);
+      background: var(--surface-soft);
+    }
+    .file-group-body { flex: 1 1 auto; min-height: 0; overflow: auto; }
+    .file-group-note {
+      flex: 0 0 auto;
+      padding: 6px 10px;
+      border-top: 1px solid var(--line);
+      background: var(--surface-soft);
+      color: var(--muted);
+      font-size: 11px;
+    }
     .file-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; padding: 7px 10px; border-bottom: 1px solid var(--line); }
     .file-row:last-child { border-bottom: 0; }
     .file-name { overflow-wrap: anywhere; font: 11px/1.45 "Cascadia Mono", Consolas, monospace; }
     .muted { color: var(--muted); }
-    .history-log { border: 1px solid #2e3a40; border-radius: var(--radius); overflow: hidden; background: var(--terminal); }
-    .history-log .panel-head { border-bottom-color: #324047; background: var(--terminal); color: #eef7f5; }
-    .history-log pre { min-height: 250px; max-height: 390px; }
+    .log-dialog {
+      width: min(960px, calc(100vw - 28px));
+      max-height: min(82vh, 860px);
+      margin: auto;
+      padding: 0;
+      border: 1px solid #2e3a40;
+      border-radius: var(--radius);
+      background: var(--surface);
+      color: var(--ink);
+      box-shadow: var(--shadow);
+    }
+    .log-dialog::backdrop { background: rgba(24, 33, 39, .48); }
+    .log-dialog-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      min-height: 50px;
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--line);
+      background: var(--surface-raised);
+    }
+    .log-dialog-head h2 { margin: 0; font: 700 15px/1.2 Bahnschrift, "Segoe UI", sans-serif; }
+    .log-dialog-meta {
+      min-width: 0;
+      overflow: hidden;
+      color: var(--muted);
+      font: 11px/1.4 "Cascadia Mono", Consolas, monospace;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .log-dialog-title-wrap { min-width: 0; display: grid; gap: 2px; }
+    .log-dialog-body {
+      margin: 0;
+      min-height: 280px;
+      max-height: min(58vh, 620px);
+      overflow: auto;
+      padding: 14px;
+      background: var(--terminal);
+      color: var(--terminal-ink);
+      font: 12px/1.62 "Cascadia Mono", "SFMono-Regular", Consolas, monospace;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+    .log-dialog-foot {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 8px;
+      padding: 10px 14px;
+      border-top: 1px solid var(--line);
+      background: var(--surface-raised);
+    }
 
-    .settings-shell { display: grid; grid-template-columns: 250px minmax(0, 1fr); min-height: 700px; }
-    .settings-nav { border-right: 1px solid var(--line); background: var(--surface-soft); }
-    .settings-search { padding: 12px; border-bottom: 1px solid var(--line); }
-    .settings-tabs { display: grid; padding: 7px; }
+    .settings-shell {
+      flex: 1 1 auto;
+      min-height: 0;
+      height: 100%;
+      display: grid;
+      grid-template-columns: 250px minmax(0, 1fr);
+    }
+    .settings-nav {
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      border-right: 1px solid var(--line);
+      background: var(--surface-soft);
+    }
+    .settings-search { flex: 0 0 auto; padding: 12px; border-bottom: 1px solid var(--line); }
+    .settings-tabs { flex: 1 1 auto; min-height: 0; overflow: auto; display: grid; align-content: start; padding: 7px; }
     .settings-tab {
       min-height: 42px;
       display: flex;
@@ -298,15 +517,25 @@
     }
     .settings-tab.active { background: #fff; color: var(--teal); box-shadow: inset 3px 0 0 var(--teal); }
     .settings-tab-count { color: var(--muted); font: 11px/1 "Cascadia Mono", Consolas, monospace; }
-    .settings-main { min-width: 0; display: grid; grid-template-rows: auto 1fr auto; }
-    .settings-head { min-height: 74px; padding: 14px 18px; border-bottom: 1px solid var(--line); }
-    .settings-head h2 { margin: 0; font: 700 20px/1.2 Bahnschrift, "Segoe UI", sans-serif; }
+    .settings-main {
+      min-width: 0;
+      min-height: 0;
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr) auto;
+      overflow: hidden;
+    }
+    .settings-head { flex: 0 0 auto; min-height: 68px; padding: 12px 18px; border-bottom: 1px solid var(--line); }
+    .settings-head h2, .settings-head h1 { margin: 0; font: 700 20px/1.2 Bahnschrift, "Segoe UI", sans-serif; }
     .settings-head p { margin: 4px 0 0; color: var(--muted); }
+    .settings-body {
+      min-height: 0;
+      overflow: auto;
+    }
     .config-sections { padding: 5px 18px 18px; }
     .config-group { display: none; }
     .config-group.active { display: block; }
     .config-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 20px; }
-    .config-field { min-width: 0; display: grid; align-content: start; gap: 6px; padding: 15px 0; border-bottom: 1px solid var(--line); }
+    .config-field { min-width: 0; display: grid; align-content: start; gap: 6px; padding: 12px 0; border-bottom: 1px solid var(--line); }
     .config-field.wide { grid-column: 1 / -1; }
     .config-field.hidden-by-search { display: none; }
     .config-field[data-disabled="true"] { opacity: .58; }
@@ -324,7 +553,17 @@
     .switch input:checked + .switch-track::after { transform: translateX(18px); }
     .switch input:focus-visible + .switch-track { outline: 3px solid rgba(46,99,135,.24); outline-offset: 2px; }
     .password-wrap { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 7px; }
-    .settings-footer { position: sticky; bottom: 0; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 11px 18px; border-top: 1px solid var(--line); background: rgba(255,255,255,.96); }
+    .settings-footer {
+      position: relative;
+      flex: 0 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 11px 18px;
+      border-top: 1px solid var(--line);
+      background: rgba(255,255,255,.96);
+    }
     .save-state { color: var(--muted); font-size: 12px; }
     .save-state.dirty { color: var(--amber); font-weight: 700; }
     .save-state.error { color: var(--red); }
@@ -335,6 +574,14 @@
     .dependency-item.blocked { border-color: #e4c78e; background: var(--amber-soft); color: var(--amber); }
     .no-results { display: none; padding: 34px 18px; color: var(--muted); text-align: center; }
 
+    @media (max-height: 860px) {
+      .shell { padding: 10px 16px 12px; gap: 10px; }
+      .run-identity, .run-metrics, .run-controls { padding: 10px 12px; }
+      .metric-value { font-size: 22px; }
+      .panel-head { min-height: 42px; padding: 8px 12px; }
+      .stage { min-height: 42px; }
+      .stage:not(:last-child)::after { top: 30px; bottom: -12px; }
+    }
     @media (max-width: 1180px) {
       .run-dock { grid-template-columns: minmax(250px, .8fr) minmax(410px, 1.2fr); }
       .run-controls { grid-column: 1 / -1; border-top: 1px solid var(--line); }
@@ -343,43 +590,84 @@
       .overview-grid { grid-template-columns: minmax(0, 1.35fr) minmax(300px, .75fr); }
     }
     @media (max-width: 860px) {
-      .header-inner { grid-template-columns: 1fr auto; gap: 10px; }
-      .primary-nav { grid-column: 1 / -1; grid-row: 2; order: 3; justify-content: stretch; height: 44px; margin: 0 -18px; border-top: 1px solid #344149; }
+      body { overflow: auto; height: auto; min-height: 100dvh; }
+      .shell { overflow: visible; height: auto; flex: 1 0 auto; padding: 10px 12px 14px; gap: 10px; }
+      .view.active { display: block; overflow: visible; }
+      .overview-grid, .side-stack, .history-panel, .settings-shell { height: auto; min-height: 0; }
+      .header-inner { grid-template-columns: 1fr auto; gap: 10px; min-height: 52px; }
+      .primary-nav { grid-column: 1 / -1; grid-row: 2; order: 3; justify-content: stretch; height: 40px; margin: 0 -12px; border-top: 1px solid #344149; }
       .nav-button { flex: 1; min-width: 0; }
       .header-state { justify-self: end; }
       .run-dock, .overview-grid, .history-layout, .settings-shell { grid-template-columns: 1fr; }
+      .run-identity, .run-metrics, .run-controls { padding: 8px 10px; }
+      .run-identity { gap: 5px; }
+      .section-label { font-size: 10px; }
+      .phase { font-size: 12px; }
+      .run-metrics { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+      .metric { padding: 0 6px; }
+      .metric-value { font-size: 18px; }
+      .metric-label { margin-top: 2px; font-size: 10px; }
+      .run-controls { grid-template-columns: 1fr 1fr auto auto; gap: 6px; }
+      .compact-field { font-size: 10px; }
+      .compact-field input { min-height: 34px; padding: 6px 8px; }
+      .run-controls button { min-height: 34px; padding: 6px 10px; }
+      .run-message { min-height: 14px; font-size: 11px; }
+      .side-stack { grid-template-rows: auto auto; gap: 10px; }
       .run-identity, .run-metrics { border-right: 0; }
       .run-identity { border-bottom: 1px solid var(--line); }
       .run-controls { grid-column: auto; }
-      .history-layout > .run-list { max-height: 310px; border-right: 0; border-bottom: 1px solid var(--line); }
-      .settings-nav { border-right: 0; border-bottom: 1px solid var(--line); }
-      .settings-tabs { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-      .settings-tab { justify-content: center; }
+      .history-layout > .run-list { max-height: 220px; border-right: 0; border-bottom: 1px solid var(--line); }
+      .file-group { max-height: 200px; }
+      .settings-nav { border-right: 0; border-bottom: 1px solid var(--line); max-height: none; }
+      .settings-tabs { grid-template-columns: repeat(3, minmax(0, 1fr)); overflow: visible; }
+      .settings-tab { justify-content: center; min-height: 38px; }
       .settings-tab-count { display: none; }
-      pre { min-height: 440px; max-height: 64vh; }
+      .settings-body { overflow: visible; }
+      .terminal { min-height: 280px; }
+      pre { min-height: 280px; max-height: 45vh; }
+      .log-dialog { width: calc(100vw - 16px); max-height: 88vh; }
+      .log-dialog-body { min-height: 220px; max-height: 58vh; }
     }
     @media (max-width: 620px) {
-      .shell { padding: 10px 10px 22px; }
-      .header-inner { padding: 0 12px; }
-      .primary-nav { margin: 0 -12px; }
+      .shell { padding: 8px 8px 12px; gap: 8px; }
+      .header-inner { padding: 0 10px; min-height: 48px; }
+      .primary-nav { margin: 0 -10px; height: 38px; }
       .brand-sub { display: none; }
+      .brand-mark { width: 28px; height: 28px; font-size: 11px; }
+      .brand-name { font-size: 16px; }
       .header-state span:last-child { display: none; }
-      .run-metrics { grid-template-columns: repeat(5, minmax(58px, 1fr)); overflow-x: auto; }
-      .metric { padding: 0 8px; }
-      .metric-value { font-size: 21px; }
-      .run-controls { grid-template-columns: 1fr 1fr; }
+      .run-identity, .run-metrics, .run-controls { padding: 6px 8px; }
+      .run-identity { gap: 4px; }
+      .phase { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; font-size: 11px; }
+      .status-badge { min-height: 22px; padding: 1px 7px; font-size: 11px; }
+      .run-id { font-size: 10px; }
+      .progress-track { height: 3px; }
+      .run-metrics { grid-template-columns: repeat(5, minmax(0, 1fr)); overflow-x: visible; }
+      .metric { padding: 0 3px; }
+      .metric-value { font-size: 15px; }
+      .metric-label { margin-top: 1px; font-size: 9px; }
+      .run-controls { grid-template-columns: 1fr 1fr; gap: 5px; }
+      .compact-field input { min-height: 32px; }
+      .run-controls button { width: 100%; min-height: 32px; padding: 5px 8px; }
+      .run-message { min-height: 12px; font-size: 10px; }
       .history-tools { width: 100%; }
       .history-tools input { min-width: 0; }
-      .panel-head { align-items: flex-start; }
+      .panel-head { align-items: flex-start; min-height: 40px; padding: 8px 10px; }
       .file-groups, .config-fields { grid-template-columns: 1fr; }
+      .file-group { max-height: 180px; }
       .config-field.wide { grid-column: auto; }
       .settings-tabs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-      .settings-head, .config-sections, .settings-footer { padding-left: 12px; padding-right: 12px; }
+      .settings-head, .config-sections, .settings-footer { padding-left: 10px; padding-right: 10px; }
       .settings-footer { align-items: flex-start; flex-direction: column; }
       .settings-actions { width: 100%; }
       .settings-actions button { flex: 1; }
       .detail-heading { display: grid; }
-      pre { min-height: 360px; }
+      .detail-actions { gap: 6px; }
+      .more-downloads { width: 100%; }
+      .more-downloads > summary { width: 100%; }
+      .more-downloads-menu { left: 0; right: 0; min-width: 0; width: 100%; }
+      .terminal { min-height: 240px; }
+      pre { min-height: 240px; }
     }
     @media (prefers-reduced-motion: reduce) {
       *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; }
@@ -398,17 +686,17 @@
         <button type="button" class="nav-button" data-view="history">历史记录</button>
         <button type="button" class="nav-button" data-view="settings">配置</button>
       </nav>
-      <div class="header-state"><i id="headerDot" class="state-dot"></i><span id="headerStatus">读取状态</span></div>
+      <div class="header-state" aria-live="polite"><i id="headerDot" class="state-dot"></i><span id="headerStatus">读取状态</span></div>
     </div>
   </header>
 
   <main class="shell">
     <section class="run-dock" aria-label="任务控制">
       <div class="run-identity">
-        <div class="section-label">Current run</div>
+        <div class="section-label">当前任务</div>
         <div class="run-line"><span id="statusBadge" class="status-badge">读取中</span><span id="runID" class="run-id">尚无运行记录</span></div>
         <p id="phase" class="phase">正在读取当前状态。</p>
-        <div class="progress-track" aria-label="任务进度"><div id="progressFill" class="progress-fill"></div></div>
+        <div id="progressTrack" class="progress-track" role="progressbar" aria-label="任务进度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="progressFill" class="progress-fill"></div></div>
       </div>
       <div class="run-metrics">
         <div class="metric"><strong id="done" class="metric-value">0</strong><span class="metric-label">完成</span></div>
@@ -470,7 +758,7 @@
             <p id="settingsDescription">控制成功判定、输出文件和后续 CPA 链路。</p>
             <div id="dependencyStrip" class="dependency-strip"></div>
           </header>
-          <div><div id="configSections" class="config-sections"></div><div id="noConfigResults" class="no-results">没有匹配的配置项。</div></div>
+          <div class="settings-body"><div id="configSections" class="config-sections"></div><div id="noConfigResults" class="no-results">没有匹配的配置项。</div></div>
           <footer class="settings-footer">
             <span id="saveState" class="save-state" role="status">配置读取中</span>
             <div class="settings-actions"><button id="checkCPA" type="button" class="secondary">检测 CPA</button><button id="saveConfig" type="button">保存更改</button></div>
@@ -479,6 +767,21 @@
       </section>
     </section>
   </main>
+
+  <dialog id="logDialog" class="log-dialog" aria-labelledby="logDialogTitle">
+    <div class="log-dialog-head">
+      <div class="log-dialog-title-wrap">
+        <h2 id="logDialogTitle">历史日志</h2>
+        <span id="logDialogMeta" class="log-dialog-meta"></span>
+      </div>
+      <button type="button" class="secondary" id="logDialogClose">关闭</button>
+    </div>
+    <pre id="logDialogBody" class="log-dialog-body"></pre>
+    <div class="log-dialog-foot">
+      <a id="logDialogDownload" class="download secondary" href="#" hidden>下载日志</a>
+      <button type="button" class="secondary" id="logDialogCloseFoot">关闭</button>
+    </div>
+  </dialog>
 
   <script>
     const $ = (id) => document.getElementById(id);
@@ -538,7 +841,28 @@
       { key: "CPA_UPLOAD_MODE", group: "cpa", label: "上传格式", type: "select", options: [["multipart", "multipart"], ["json", "json"]], depends: "cpa-upload" }
     ];
     const configKeys = fields.map((field) => field.key);
-    const state = { view: "overview", status: "stopped", runs: [], selectedRun: "", query: "", config: {}, savedConfig: {}, configGroup: "output", configQuery: "", pollTimer: 0 };
+    const POLL_RUNNING_MS = 3000;
+    const POLL_IDLE_MS = 15000;
+    const state = {
+      view: "overview",
+      status: "stopped",
+      runs: [],
+      runsSig: "",
+      selectedRun: "",
+      query: "",
+      config: {},
+      savedConfig: {},
+      configGroup: "output",
+      configQuery: "",
+      pollTimer: 0,
+      detailSeq: 0,
+      logSize: 0,
+      logMtime: 0,
+      logPath: "",
+      logsPrimed: false,
+      statusSig: "",
+      snapshot: null
+    };
 
     function escapeHTML(value) {
       return String(value ?? "").replace(/[&<>"']/g, (char) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[char]));
@@ -554,6 +878,27 @@
       if (!value) return "";
       const date = new Date(value);
       return Number.isNaN(date.getTime()) ? value : new Intl.DateTimeFormat("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false }).format(date);
+    }
+    function formatElapsed(startedAt) {
+      if (!startedAt) return "";
+      const start = new Date(startedAt).getTime();
+      if (Number.isNaN(start)) return "";
+      let sec = Math.max(0, Math.floor((Date.now() - start) / 1000));
+      const h = Math.floor(sec / 3600);
+      sec %= 3600;
+      const m = Math.floor(sec / 60);
+      const s = sec % 60;
+      if (h) return h + " 小时 " + m + " 分";
+      if (m) return m + " 分 " + s + " 秒";
+      return s + " 秒";
+    }
+    function isNearBottom(el, threshold) {
+      if (!el) return true;
+      const gap = el.scrollHeight - el.scrollTop - el.clientHeight;
+      return gap <= (threshold ?? 48);
+    }
+    function isConfigDirty() {
+      return configKeys.some((key) => fieldValue(key) !== (state.savedConfig[key] ?? ""));
     }
     async function api(url, options) {
       const response = await fetch(url, options);
@@ -739,30 +1084,45 @@
     function renderPipeline() {
       const cfg = Object.keys(state.config).length ? readFormConfig() : state.config;
       const phase = state.snapshot?.phase || "idle";
+      const running = state.status === "running";
       const sso = cfg.OUTPUT_SSO_ENABLED === "1";
       const grok2api = sso && cfg.OUTPUT_GROK2API_SSO_ENABLED === "1";
       const cpa = cfg.OUTPUT_CPA_ENABLED === "1";
       const upload = cpa && cfg.CPA_UPLOAD_ENABLED === "1";
       const stages = [
-        { n: "01", title: "注册与 SSO", detail: sso ? "保留 SSO 文件" : "获得 SSO 后计成功", active: phase === "register" || state.status === "running" },
-        { n: "02", title: "grok2api SSO", detail: grok2api ? "写入 tokens.txt" : "不输出", active: grok2api, skipped: !grok2api },
-        { n: "03", title: "OAuth 与探活", detail: cpa ? "交换令牌并验证" : "整段跳过", active: cpa && ["oauth", "probe"].includes(phase), skipped: !cpa },
-        { n: "04", title: "CPA 输出", detail: cpa ? "写入 CPA JSON" : "不输出", active: cpa, skipped: !cpa },
-        { n: "05", title: "自动上传", detail: upload ? "发送到 Management API" : "不上传", active: upload, skipped: !upload }
+        { n: "01", title: "注册与 SSO", detail: sso ? "保留 SSO 文件" : "获得 SSO 后计成功", enabled: true, current: running && (phase === "register" || phase === "clearance" || phase === "idle"), skipped: false },
+        { n: "02", title: "grok2api SSO", detail: grok2api ? "写入 tokens.txt" : "不输出", enabled: grok2api, current: false, skipped: !grok2api },
+        { n: "03", title: "OAuth 与探活", detail: cpa ? "交换令牌并验证" : "整段跳过", enabled: cpa, current: running && cpa && (phase === "oauth" || phase === "probe"), skipped: !cpa },
+        { n: "04", title: "CPA 输出", detail: cpa ? "写入 CPA JSON" : "不输出", enabled: cpa, current: false, skipped: !cpa },
+        { n: "05", title: "自动上传", detail: upload ? "发送到 Management API" : "不上传", enabled: upload, current: false, skipped: !upload }
       ];
-      $("pipeline").innerHTML = stages.map((stage) => `<div class="stage${stage.active ? " active" : ""}${stage.skipped ? " skipped" : ""}"><span class="stage-node">${stage.n}</span><span class="stage-copy"><b>${stage.title}</b><span>${stage.detail}</span></span><span class="stage-state">${stage.skipped ? "跳过" : stage.active ? "生效" : "待执行"}</span></div>`).join("");
+      $("pipeline").innerHTML = stages.map((stage) => {
+        const skipped = !!stage.skipped;
+        const current = !!stage.current && !skipped;
+        const label = skipped ? "跳过" : current ? "进行中" : stage.enabled ? "启用" : "待执行";
+        return `<div class="stage${current ? " active" : ""}${skipped ? " skipped" : ""}"><span class="stage-node">${stage.n}</span><span class="stage-copy"><b>${stage.title}</b><span>${stage.detail}</span></span><span class="stage-state">${label}</span></div>`;
+      }).join("");
     }
 
     function phaseLabel(snapshot) {
       const labels = { idle: "等待启动", clearance: "准备清障环境", register: "注册与获取 SSO", oauth: "OAuth 令牌交换", probe: "CPA 探活" };
       if (snapshot.error) return snapshot.error;
-      return snapshot.phase_detail || labels[snapshot.phase] || (snapshot.status === "running" ? "任务运行中" : "当前没有运行中的任务");
+      let text = snapshot.phase_detail || labels[snapshot.phase] || (snapshot.status === "running" ? "任务运行中" : "当前没有运行中的任务");
+      if (snapshot.status === "running") {
+        const elapsed = formatElapsed(snapshot.started_at);
+        if (elapsed) text += " · 已运行 " + elapsed;
+      }
+      return text;
     }
     async function refreshStatus() {
       try {
         const snapshot = await api("/api/status");
+        const nextStatus = snapshot.status || "stopped";
+        const sig = [nextStatus, snapshot.run_id, snapshot.done, snapshot.target, snapshot.oauth_count, snapshot.fail_count, snapshot.rate_per_min, snapshot.phase, snapshot.phase_detail, snapshot.error, snapshot.started_at].join("|");
+        const statusModeChanged = state.status !== nextStatus;
         state.snapshot = snapshot;
-        state.status = snapshot.status || "stopped";
+        state.status = nextStatus;
+        state.statusSig = sig;
         const running = state.status === "running";
         const errored = state.status === "error";
         const text = running ? "运行中" : errored ? "异常" : "已停止";
@@ -779,22 +1139,41 @@
         $("rate").textContent = Number(snapshot.rate_per_min || 0).toFixed(snapshot.rate_per_min >= 10 ? 0 : 1);
         const progress = snapshot.target ? Math.min(100, Math.round((snapshot.done || 0) / snapshot.target * 100)) : 0;
         $("progressFill").style.width = progress + "%";
+        const track = $("progressTrack");
+        if (track) track.setAttribute("aria-valuenow", String(progress));
         $("startButton").disabled = running;
         $("stopButton").disabled = !running;
-        updatePolling();
+        if (statusModeChanged) updatePolling();
+        else if (!state.pollTimer) updatePolling();
         renderPipeline();
       } catch (error) {
         $("headerStatus").textContent = "状态不可用";
         $("phase").textContent = error.message;
       }
     }
-    async function refreshLogs() {
+    async function refreshLogs(force) {
       try {
-        const data = await api("/api/logs?tail=500");
-        $("logPath").textContent = data.path ? data.path.split(/[\\/]/).pop() : "尚无日志";
-        $("logs").textContent = data.lines?.length ? data.lines.join("\n") : "暂无日志。启动任务后，运行输出会显示在这里。";
-        $("logs").scrollTop = $("logs").scrollHeight;
-      } catch (error) { $("logs").textContent = "日志读取失败：" + error.message; }
+        let url = "/api/logs?tail=500";
+        if (!force && state.logPath && state.logSize) {
+          url += "&since_size=" + encodeURIComponent(String(state.logSize)) + "&since_mtime=" + encodeURIComponent(String(state.logMtime));
+        }
+        const data = await api(url);
+        if (data.unchanged) return;
+        const pathLabel = data.path ? data.path.split(/[\\/]/).pop() : "尚无日志";
+        const text = data.lines?.length ? data.lines.join("\n") : "暂无日志。启动任务后，运行输出会显示在这里。";
+        const el = $("logs");
+        const follow = !state.logsPrimed || isNearBottom(el);
+        if ($("logPath").textContent !== pathLabel) $("logPath").textContent = pathLabel;
+        if (el.textContent !== text) el.textContent = text;
+        state.logPath = data.path || "";
+        state.logSize = data.size || 0;
+        state.logMtime = data.mtime || 0;
+        state.logsPrimed = true;
+        if (follow) el.scrollTop = el.scrollHeight;
+      } catch (error) {
+        $("logs").textContent = "日志读取失败：" + error.message;
+        state.logsPrimed = true;
+      }
     }
 
     function runCard(run, active) {
@@ -803,8 +1182,11 @@
     function bindRunCards(root) {
       for (const card of root.querySelectorAll("[data-run-id]")) card.addEventListener("click", () => { showView("history"); selectRun(card.dataset.runId); });
     }
-    function renderRuns() {
+    function renderRuns(force) {
       const query = state.query.trim().toLowerCase();
+      const sig = JSON.stringify(state.runs) + "|" + query + "|" + state.selectedRun;
+      if (!force && sig === state.runsSig) return;
+      state.runsSig = sig;
       const filtered = state.runs.filter((run) => !query || [run.id, run.log_exists ? "日志" : "", run.sso_count ? "sso" : "", run.grok2api_sso_count ? "grok2api" : "", run.cpa_count ? "cpa" : "", run.discarded_count ? "丢弃" : ""].join(" ").toLowerCase().includes(query));
       $("runs").innerHTML = filtered.length ? filtered.map((run) => runCard(run, run.id === state.selectedRun)).join("") : `<div class="empty">${query ? "没有匹配的历史记录。" : "暂无历史记录。"}</div>`;
       bindRunCards($("runs"));
@@ -812,14 +1194,29 @@
       $("recentRuns").innerHTML = recent.length ? recent.map((run) => runCard(run, false)).join("") : '<div class="empty">暂无历史记录。</div>';
       bindRunCards($("recentRuns"));
     }
-    async function refreshRuns() {
-      try { state.runs = await api("/api/runs"); renderRuns(); } catch (error) { $("runs").innerHTML = `<div class="empty">读取失败：${escapeHTML(error.message)}</div>`; }
+    async function refreshRuns(force) {
+      try {
+        const runs = await api("/api/runs");
+        state.runs = runs;
+        renderRuns(force);
+      } catch (error) {
+        state.runsSig = "";
+        $("runs").innerHTML = `<div class="empty">读取失败：${escapeHTML(error.message)}</div>`;
+      }
     }
     async function selectRun(id, silent) {
       state.selectedRun = id;
-      renderRuns();
+      const seq = ++state.detailSeq;
+      renderRuns(true);
       if (!silent) $("runDetail").innerHTML = '<div class="empty">读取记录详情...</div>';
-      try { renderRunDetail(await api("/api/runs/detail?id=" + encodeURIComponent(id))); } catch (error) { $("runDetail").innerHTML = `<div class="empty">读取失败：${escapeHTML(error.message)}</div>`; }
+      try {
+        const detail = await api("/api/runs/detail?id=" + encodeURIComponent(id));
+        if (seq !== state.detailSeq || state.selectedRun !== id) return;
+        renderRunDetail(detail);
+      } catch (error) {
+        if (seq !== state.detailSeq || state.selectedRun !== id) return;
+        $("runDetail").innerHTML = `<div class="empty">读取失败：${escapeHTML(error.message)}</div>`;
+      }
     }
     function renderRunDetail(detail) {
       const groups = [
@@ -828,31 +1225,94 @@
         ["cpa", "CPA", "该任务没有 CPA 输出文件。"],
         ["discarded", "丢弃", "该任务没有丢弃记录。"]
       ];
+      const moreLinks = [
+        '<a href="' + escapeHTML(detail.download_sso_url) + '">下载 SSO</a>',
+        '<a href="' + escapeHTML(detail.download_grok2api_url) + '">下载 grok2api SSO</a>',
+        '<a href="' + escapeHTML(detail.download_cpa_url) + '">下载 CPA</a>',
+        '<a href="' + escapeHTML(detail.download_discarded_url) + '">下载丢弃</a>'
+      ];
+      if (detail.log_exists) moreLinks.push('<a href="' + escapeHTML(detail.download_log_url) + '">下载日志</a>');
+      const hasLog = !!(detail.log && detail.log.exists);
       $("runDetail").innerHTML = [
         '<div class="detail-heading"><div><h2>' + escapeHTML(detail.id) + '</h2><div class="detail-summary"><span class="chip" title="accounts.txt 行数">账号 ' + (detail.sso_count || 0) + '</span><span class="chip" title="tokens.txt 非空行数">token 行 ' + (detail.grok2api_sso_count || 0) + '</span><span class="chip" title="CPA 目录 JSON 文件数">CPA 文件 ' + (detail.cpa_count || 0) + '</span><span class="chip">' + formatSize(detail.total_size) + '</span></div></div></div>',
         '<div class="detail-actions">',
         '<a class="download" href="' + escapeHTML(detail.download_url) + '">下载全部</a>',
-        '<a class="download secondary" href="' + escapeHTML(detail.download_sso_url) + '">下载 SSO</a>',
-        '<a class="download secondary" href="' + escapeHTML(detail.download_grok2api_url) + '">下载 grok2api SSO</a>',
-        '<a class="download secondary" href="' + escapeHTML(detail.download_cpa_url) + '">下载 CPA</a>',
-        '<a class="download secondary" href="' + escapeHTML(detail.download_discarded_url) + '">下载丢弃</a>',
-        detail.log_exists ? '<a class="download secondary" href="' + escapeHTML(detail.download_log_url) + '">下载日志</a>' : '',
+        '<details class="more-downloads"><summary>更多下载</summary><div class="more-downloads-menu">' + moreLinks.join("") + '</div></details>',
+        '<button type="button" class="secondary" id="viewRunLog"' + (hasLog ? "" : " disabled") + '>' + (hasLog ? "查看日志" : "无日志") + '</button>',
         '<button type="button" class="secondary" id="copyRunID">复制 run ID</button>',
         '<button type="button" class="secondary" id="deleteRecord" ' + (detail.delete_disabled ? 'disabled' : '') + '>删除记录</button>',
         '<button type="button" class="danger" id="deleteRun" ' + (detail.delete_disabled ? 'disabled' : '') + '>删除记录和文件</button>',
         '</div>',
-        '<div class="file-groups">' + groups.map(([key, label, empty]) => renderFileGroup(label, detail.files[key] || [], empty)).join("") + '</div>',
-        '<section class="history-log"><div class="panel-head"><h2 class="panel-title">历史日志</h2><span class="panel-meta">' + (detail.log.exists ? escapeHTML(detail.log.path.split(/[\\/]/).pop()) : "未找到日志") + '</span></div><pre>' + (detail.log.exists && detail.log.lines.length ? escapeHTML(detail.log.lines.join("\n")) : "未找到该 run 的日志文件。") + '</pre></section>'
+        '<p id="detailMessage" class="detail-message" role="status"></p>',
+        '<div class="file-groups">' + groups.map(([key, label, empty]) => renderFileGroup(label, detail.files[key] || [], empty)).join("") + '</div>'
       ].join("");
       $("copyRunID").addEventListener("click", () => copyRunID(detail.id));
       $("deleteRecord").addEventListener("click", () => deleteSelectedRun(detail.id, "record"));
       $("deleteRun").addEventListener("click", () => deleteSelectedRun(detail.id, "all"));
+      $("viewRunLog").addEventListener("click", () => openLogDialog(detail));
+      // Close the menu when a download link is chosen.
+      const more = document.querySelector(".more-downloads");
+      if (more) {
+        for (const link of more.querySelectorAll("a")) {
+          link.addEventListener("click", () => { more.open = false; });
+        }
+      }
+    }
+    function openLogDialog(detail) {
+      const dialog = $("logDialog");
+      if (!dialog) return;
+      const path = detail.log?.path ? detail.log.path.split(/[\\/]/).pop() : "";
+      $("logDialogMeta").textContent = path || detail.id || "";
+      if (detail.log?.exists && detail.log.lines?.length) {
+        $("logDialogBody").textContent = detail.log.lines.join("\n");
+      } else if (detail.log?.exists) {
+        $("logDialogBody").textContent = "日志文件存在，但没有可显示的内容。";
+      } else {
+        $("logDialogBody").textContent = "未找到该 run 的日志文件。";
+      }
+      const download = $("logDialogDownload");
+      if (detail.log_exists && detail.download_log_url) {
+        download.hidden = false;
+        download.href = detail.download_log_url;
+      } else {
+        download.hidden = true;
+        download.removeAttribute("href");
+      }
+      if (typeof dialog.showModal === "function") dialog.showModal();
+      else dialog.setAttribute("open", "");
+      $("logDialogBody").scrollTop = 0;
+    }
+    function closeLogDialog() {
+      const dialog = $("logDialog");
+      if (!dialog) return;
+      if (typeof dialog.close === "function") dialog.close();
+      else dialog.removeAttribute("open");
     }
     function renderFileGroup(label, files, emptyText) {
-      return `<section class="file-group"><header><b>${escapeHTML(label)}</b><span class="muted">${files.length}</span></header>${files.length ? files.map((file) => `<div class="file-row"><span class="file-name">${escapeHTML(file.name)}</span><span class="muted">${formatSize(file.size)}</span></div>`).join("") : `<div class="empty">${escapeHTML(emptyText)}</div>`}</section>`;
+      const truncated = files.length >= 200;
+      const countLabel = truncated ? "200+" : String(files.length);
+      const note = truncated
+        ? '<div class="file-group-note">仅展示前 200 个文件，完整内容请使用上方下载。</div>'
+        : (files.length > 8 ? '<div class="file-group-note">列表可滚动；完整打包请下载对应分类。</div>' : "");
+      const body = files.length
+        ? files.map((file) => `<div class="file-row"><span class="file-name">${escapeHTML(file.name)}</span><span class="muted">${formatSize(file.size)}</span></div>`).join("")
+        : `<div class="empty">${escapeHTML(emptyText)}</div>`;
+      return `<section class="file-group"><header><b>${escapeHTML(label)}</b><span class="muted">${countLabel}</span></header><div class="file-group-body">${body}</div>${note}</section>`;
+    }
+    function setDetailMessage(message, error) {
+      const el = $("detailMessage");
+      if (!el) return;
+      el.textContent = message || "";
+      el.className = "detail-message" + (error ? " error" : "");
     }
     async function copyRunID(id) {
-      try { await navigator.clipboard.writeText(id); setRunMessage("已复制 run ID：" + id); } catch { window.prompt("复制 run ID", id); }
+      try {
+        await navigator.clipboard.writeText(id);
+        setDetailMessage("已复制 run ID：" + id);
+      } catch {
+        window.prompt("复制 run ID", id);
+        setDetailMessage("请手动复制 run ID：" + id);
+      }
     }
     async function deleteSelectedRun(id, mode) {
       const run = state.runs.find((item) => item.id === id);
@@ -869,63 +1329,130 @@
     }
 
     function showView(view) {
+      if (view === state.view) return;
+      if (view !== "settings" && state.view === "settings" && isConfigDirty()) {
+        if (!window.confirm("配置有未保存更改，切换页面不会自动保存。仍要离开配置页吗？")) return;
+      }
+      closeLogDialog();
       state.view = view;
-      for (const button of document.querySelectorAll(".nav-button")) button.classList.toggle("active", button.dataset.view === view);
+      for (const button of document.querySelectorAll(".nav-button")) {
+        const active = button.dataset.view === view;
+        button.classList.toggle("active", active);
+        if (active) button.setAttribute("aria-current", "page");
+        else button.removeAttribute("aria-current");
+      }
       for (const section of document.querySelectorAll(".view")) section.classList.toggle("active", section.id === "view-" + view);
-      if (view === "history") refreshRuns();
-      if (view === "overview") refreshLogs();
+      if (view === "history") refreshRuns(true);
+      if (view === "overview") refreshLogs(true);
     }
     function setRunMessage(message, error) {
       $("runMessage").textContent = message;
       $("runMessage").className = "run-message" + (error ? " error" : "");
     }
     function updatePolling() {
-      if (state.status === "running" && !state.pollTimer) state.pollTimer = window.setInterval(pollRunning, 3000);
-      if (state.status !== "running" && state.pollTimer) { window.clearInterval(state.pollTimer); state.pollTimer = 0; }
+      if (state.pollTimer) {
+        window.clearInterval(state.pollTimer);
+        state.pollTimer = 0;
+      }
+      if (document.hidden) return;
+      const ms = state.status === "running" ? POLL_RUNNING_MS : POLL_IDLE_MS;
+      state.pollTimer = window.setInterval(pollTick, ms);
     }
-    async function pollRunning() {
-      if (state.status !== "running") return updatePolling();
+    async function pollTick() {
+      if (document.hidden) return;
       const jobs = [refreshStatus()];
-      if (state.view === "overview") jobs.push(refreshLogs());
-      if (state.view === "history") jobs.push(refreshRuns());
+      if (state.view === "overview" && (state.status === "running" || !state.logsPrimed)) jobs.push(refreshLogs(false));
+      if (state.view === "history" && state.status === "running") jobs.push(refreshRuns(false));
+      await Promise.allSettled(jobs);
+    }
+    async function refreshVisible() {
+      const jobs = [refreshStatus()];
+      if (state.view === "overview") jobs.push(refreshLogs(true));
+      if (state.view === "history") jobs.push(refreshRuns(true));
       await Promise.allSettled(jobs);
     }
 
     renderConfigUI();
+    $("logDialogClose").addEventListener("click", closeLogDialog);
+    $("logDialogCloseFoot").addEventListener("click", closeLogDialog);
+    $("logDialog").addEventListener("click", (event) => {
+      // Click on backdrop (dialog itself) closes; content stops propagation via default dialog behavior for children.
+      if (event.target === $("logDialog")) closeLogDialog();
+    });
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && $("logDialog")?.open) closeLogDialog();
+    });
     for (const button of document.querySelectorAll(".nav-button, .nav-jump")) button.addEventListener("click", () => showView(button.dataset.view));
+    const overviewNav = document.querySelector('.nav-button[data-view="overview"]');
+    if (overviewNav) overviewNav.setAttribute("aria-current", "page");
     $("configSearch").addEventListener("input", (event) => { state.configQuery = event.target.value; filterConfig(); });
-    $("historySearch").addEventListener("input", (event) => { state.query = event.target.value; renderRuns(); });
-    $("refreshHistory").addEventListener("click", refreshRuns);
+    $("historySearch").addEventListener("input", (event) => { state.query = event.target.value; state.runsSig = ""; renderRuns(true); });
+    $("refreshHistory").addEventListener("click", () => refreshRuns(true));
     $("saveConfig").addEventListener("click", saveConfig);
     $("checkCPA").addEventListener("click", async () => {
-      const saved = await saveConfig();
-      if (!saved && configKeys.some((key) => fieldValue(key) !== state.savedConfig[key])) return;
-      $("saveState").textContent = "正在检测 CPA...";
+      $("saveState").textContent = "正在检测 CPA（使用当前表单值，不写入磁盘）...";
+      $("saveState").className = "save-state";
       try {
-        const result = await api("/api/check/cpa", { method: "POST" });
+        const result = await api("/api/check/cpa", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            CPA_MANAGEMENT_BASE: fieldValue("CPA_MANAGEMENT_BASE"),
+            CPA_MANAGEMENT_KEY: fieldValue("CPA_MANAGEMENT_KEY")
+          })
+        });
         $("saveState").textContent = result.ok ? `CPA 检测通过，HTTP ${result.status}` : `CPA 检测失败：${result.error || ("HTTP " + result.status)}`;
         $("saveState").className = "save-state" + (result.ok ? "" : " error");
-      } catch (error) { $("saveState").textContent = "CPA 检测失败：" + error.message; $("saveState").className = "save-state error"; }
+      } catch (error) {
+        $("saveState").textContent = "CPA 检测失败：" + error.message;
+        $("saveState").className = "save-state error";
+      }
     });
     $("controlForm").addEventListener("submit", async (event) => {
       event.preventDefault();
       if (!event.currentTarget.reportValidity()) return;
+      if (isConfigDirty()) {
+        const ok = window.confirm("配置有未保存更改。启动将使用磁盘上已保存的配置，而不是当前表单。仍要启动吗？");
+        if (!ok) return;
+      }
       setRunMessage("正在启动任务...");
+      $("startButton").disabled = true;
       try {
         await api("/api/start", { method: "POST", headers: {"Content-Type":"application/x-www-form-urlencoded"}, body: new URLSearchParams({ target: $("targetInput").value, thread: $("threadInput").value }) });
         setRunMessage("任务已启动");
-        await Promise.allSettled([refreshStatus(), refreshLogs(), refreshRuns()]);
-      } catch (error) { setRunMessage(error.message, true); }
+        state.logsPrimed = false;
+        state.logSize = 0;
+        state.logMtime = 0;
+        await Promise.allSettled([refreshStatus(), refreshLogs(true), refreshRuns(true)]);
+      } catch (error) {
+        setRunMessage(error.message, true);
+        $("startButton").disabled = state.status === "running";
+      }
     });
     $("stopButton").addEventListener("click", async () => {
       setRunMessage("正在停止任务...");
-      try { await api("/api/stop", { method: "POST" }); setRunMessage("任务已停止"); await Promise.allSettled([refreshStatus(), refreshLogs(), refreshRuns()]); }
-      catch (error) { setRunMessage(error.message, true); }
+      $("stopButton").disabled = true;
+      try {
+        await api("/api/stop", { method: "POST" });
+        setRunMessage("任务已停止");
+        await Promise.allSettled([refreshStatus(), refreshLogs(true), refreshRuns(true)]);
+      } catch (error) {
+        setRunMessage(error.message, true);
+        $("stopButton").disabled = state.status !== "running";
+      }
     });
     window.addEventListener("beforeunload", (event) => {
-      if (configKeys.some((key) => fieldValue(key) !== state.savedConfig[key])) { event.preventDefault(); event.returnValue = ""; }
+      if (isConfigDirty()) { event.preventDefault(); event.returnValue = ""; }
     });
-    Promise.allSettled([loadConfig(), refreshStatus(), refreshLogs(), refreshRuns()]);
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden) {
+        if (state.pollTimer) { window.clearInterval(state.pollTimer); state.pollTimer = 0; }
+        return;
+      }
+      updatePolling();
+      refreshVisible();
+    });
+    Promise.allSettled([loadConfig(), refreshStatus(), refreshLogs(true), refreshRuns(true)]).then(() => updatePolling());
   </script>
 </body>
 </html>

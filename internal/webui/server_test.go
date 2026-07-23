@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -49,10 +50,13 @@ func TestIndexShowsRedesignedHistoryUI(t *testing.T) {
 		t.Fatalf("status = %d, want %d", res.Code, http.StatusOK)
 	}
 	body := res.Body.String()
-	for _, want := range []string{"历史记录包含", "删除记录和文件", "grok2api SSO", "CPA 输出"} {
+	for _, want := range []string{"历史记录包含", "删除记录和文件", "更多下载", "查看日志", "logDialog", "file-group-body", "grok2api SSO", "CPA 输出"} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("body does not contain %q", want)
 		}
+	}
+	if strings.Contains(body, `class="history-log"`) {
+		t.Fatal("history detail should not embed the black history-log panel")
 	}
 }
 
@@ -124,6 +128,77 @@ func TestAuthorizedLogEndpointReturnsLatestLog(t *testing.T) {
 	}
 	if got := res.Body.String(); !strings.Contains(got, "line two") || strings.Contains(got, "line one") {
 		t.Fatalf("body = %q, want only latest tail line", got)
+	}
+	if got := res.Body.String(); !strings.Contains(got, `"size":`) || !strings.Contains(got, `"mtime":`) {
+		t.Fatalf("body = %q, want size and mtime fields", got)
+	}
+}
+
+func TestLogEndpointUnchangedSkipsLines(t *testing.T) {
+	dir := t.TempDir()
+	logs := filepath.Join(dir, "logs")
+	if err := os.MkdirAll(logs, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(logs, "run-20260722-100200.log")
+	if err := os.WriteFile(path, []byte("alpha\nbeta\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	st, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	app := New(AppConfig{Home: dir, Username: "admin", Password: "secret"})
+	url := "/api/logs?tail=10&since_size=" + itoa64(st.Size()) + "&since_mtime=" + itoa64(st.ModTime().Unix())
+	req := httptest.NewRequest(http.MethodGet, url, nil)
+	req.SetBasicAuth("admin", "secret")
+	res := httptest.NewRecorder()
+	app.Handler().ServeHTTP(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", res.Code, res.Body.String())
+	}
+	body := res.Body.String()
+	if !strings.Contains(body, `"unchanged":true`) {
+		t.Fatalf("body = %s, want unchanged true", body)
+	}
+	if strings.Contains(body, "beta") {
+		t.Fatalf("body = %s, unchanged response should omit lines", body)
+	}
+}
+
+func itoa64(n int64) string {
+	return strconv.FormatInt(n, 10)
+}
+
+func TestCheckCPAUsesBodyWithoutSaving(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "config.env"), []byte("CPA_MANAGEMENT_BASE=\nCPA_MANAGEMENT_KEY=\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	app := New(AppConfig{Home: dir, Username: "admin", Password: "secret"})
+	// Invalid URL still proves body overrides empty saved config (not "please fill first").
+	req := httptest.NewRequest(http.MethodPost, "/api/check/cpa", strings.NewReader(`{"CPA_MANAGEMENT_BASE":"http://127.0.0.1:1","CPA_MANAGEMENT_KEY":"probe-key"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.SetBasicAuth("admin", "secret")
+	res := httptest.NewRecorder()
+	app.Handler().ServeHTTP(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", res.Code, res.Body.String())
+	}
+	body := res.Body.String()
+	if strings.Contains(body, "请先填写") {
+		t.Fatalf("body = %s, should use request body not saved empty config", body)
+	}
+	if !strings.Contains(body, `"ok":false`) {
+		t.Fatalf("body = %s, want ok false for unreachable endpoint", body)
+	}
+	// Config file must remain empty for those keys.
+	raw, err := os.ReadFile(filepath.Join(dir, "config.env"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(raw), "probe-key") {
+		t.Fatalf("config.env was modified by check: %s", raw)
 	}
 }
 

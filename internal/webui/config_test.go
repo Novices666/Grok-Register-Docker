@@ -64,9 +64,16 @@ func TestRunSummarySSOCountUsesAccountsLines(t *testing.T) {
 		t.Fatal(err)
 	}
 	app := New(AppConfig{Home: dir, Username: "admin", Password: "secret"})
-	sum := app.summarizeRun(runID, filepath.Join(dir, "outputs", runID), time.Now())
+	sum := app.summarizeRun(runID, filepath.Join(dir, "outputs", runID), time.Now(), "", false)
 	if sum.SSOCount != 3 {
 		t.Fatalf("SSOCount = %d, want 3 (accounts lines)", sum.SSOCount)
+	}
+	if sum.TotalSize != 0 {
+		t.Fatalf("TotalSize = %d, want 0 when withSize=false", sum.TotalSize)
+	}
+	sumSized := app.summarizeRun(runID, filepath.Join(dir, "outputs", runID), time.Now(), "", true)
+	if sumSized.TotalSize <= 0 {
+		t.Fatalf("TotalSize = %d, want >0 when withSize=true", sumSized.TotalSize)
 	}
 }
 
