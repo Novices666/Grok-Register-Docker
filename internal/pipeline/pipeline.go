@@ -234,13 +234,42 @@ func (e *Engine) run(ctx context.Context) error {
 		}
 		stackStarted = true
 		log.Infof("[clearance] %s", msg)
-		e.cm = clearance.NewManager(cfg.FlareSolverrURL, cfg.ClearanceProxy, cfg.ClearanceURLs)
-		if msg2, err2 := e.cm.Prewarm(); err2 != nil {
-			log.Warnf("[clearance] 预热: %v (%s)", err2, msg2)
+		// Extra settle after cold start (WARP + FS browser pool).
+		if reason == "proxy_down" || reason == "proxy_refused" {
+			log.Info("[clearance] 冷启动后等待 8s 再预热…")
+			time.Sleep(8 * time.Second)
+		}
+		proxy := cfg.ClearanceProxy
+		if proxy == "" {
+			proxy = "http://privoxy:8118"
+		}
+		e.cm = clearance.NewManager(cfg.FlareSolverrURL, proxy, cfg.ClearanceURLs)
+		// Up to 2 full prewarm rounds if accounts still fails.
+		var msg2 string
+		var err2 error
+		for round := 1; round <= 2; round++ {
+			msg2, err2 = e.cm.Prewarm()
+			if err2 == nil {
+				break
+			}
+			if round < 2 && strings.Contains(err2.Error(), "accounts.x.ai") {
+				log.Warnf("[clearance] 预热第 %d 轮失败: %v — 15s 后重试", round, err2)
+				time.Sleep(15 * time.Second)
+				continue
+			}
+			break
+		}
+		if err2 != nil {
+			log.Warnf("[clearance] 预热异常: %v | %s", err2, msg2)
+			log.Warn("[clearance] 若 accounts.x.ai 为 ERR：请先 docker compose up 并保持栈常开(CLEARANCE_AUTO_STOP=0)，再 grok start")
 		} else {
 			log.Infof("[clearance] %s", msg2)
 		}
 	}
+
+	// If config points REGISTER_PROXY at local Privoxy (40080) but stack is down,
+	// start it FIRST — otherwise warm spams chrome_124/120 with connection refused.
+	proxyNeedsStack := clearance.LocalClearanceProxyDown(cfg.RegisterProxy, 40080)
 
 	switch clearMode {
 	case "always":
@@ -248,8 +277,15 @@ func (e *Engine) run(ctx context.Context) error {
 		ensureClearance("always")
 	case "never":
 		log.Info("[clearance] CLEARANCE_MODE=never（协议 TLS 直连/代理，无 Docker 清障）")
+		if proxyNeedsStack {
+			log.Warn("[clearance] REGISTER_PROXY 指向 :40080 但清障未运行，且 MODE=never — 请改代理或改为 auto/always")
+		}
 	default:
 		log.Info("[clearance] CLEARANCE_MODE=auto（协议优先，CF 拦截时再拉清障）")
+		if proxyNeedsStack && cfg.ClearanceEnabled {
+			log.Info("[clearance] 检测到 REGISTER_PROXY→:40080 未监听，先起清障再 warm")
+			ensureClearance("proxy_down")
+		}
 	}
 	if cfg.ClearanceAutoStop && clearMode != "never" {
 		log.Info("[clearance] CLEARANCE_AUTO_STOP=1：本 run 若拉起栈，结束时将 stop")
@@ -331,39 +367,69 @@ func (e *Engine) run(ctx context.Context) error {
 	log.Info("Fetching signup config (protocol warm)…")
 	scfg, err := e.xai.FetchConfig()
 	if err != nil {
-		// Protocol-first: CF block → try profile fallbacks, then clearance auto
 		code := protocol.CodeOf(err)
+		errStr := err.Error()
+		proxyDead := strings.Contains(errStr, "connection refused") ||
+			strings.Contains(errStr, "40080") ||
+			strings.Contains(errStr, "connect: connection refused")
 		log.Warnf("[cf] warm failed code=%s err=%v", code, err)
-		tried := map[string]struct{}{e.xai.Profile(): {}}
-		for _, fb := range protocol.FallbackProfiles(cfg.CFImpersonateFallback) {
-			if _, ok := tried[fb]; ok {
-				continue
-			}
-			tried[fb] = struct{}{}
-			log.Infof("[cf] try impersonate fallback=%s", fb)
-			if rerr := e.xai.RecreateWithProfile(fb); rerr != nil {
-				log.Warnf("[cf] recreate %s: %v", fb, rerr)
-				continue
-			}
-			scfg, err = e.xai.FetchConfig()
-			if err == nil {
-				log.Infof("[cf] warm ok profile=%s", e.xai.Profile())
-				break
-			}
-			log.Warnf("[cf] fallback %s failed: %v", fb, err)
-		}
-		if err != nil && clearMode == "auto" {
-			ensureClearance("cf_blocked")
-			// rebuild client with clearance cookies
+
+		// Proxy dead → start clearance immediately, skip fingerprint spam.
+		if proxyDead && clearMode == "auto" && cfg.ClearanceEnabled {
+			log.Warn("[cf] 代理不可达 (connection refused)，跳过 impersonate 回退，直接拉清障")
+			ensureClearance("proxy_refused")
 			e.xai, err = protocol.NewClientOpts(protocol.ClientOptions{
 				Proxy:       cfg.RegisterProxy,
 				Clearance:   e.cm,
-				Impersonate: e.xai.Profile(),
+				Impersonate: imp,
 			})
 			if err != nil {
 				return err
 			}
 			scfg, err = e.xai.FetchConfig()
+		} else {
+			// Protocol-first: CF block → try profile fallbacks, then clearance auto
+			tried := map[string]struct{}{e.xai.Profile(): {}}
+			for _, fb := range protocol.FallbackProfiles(cfg.CFImpersonateFallback) {
+				if _, ok := tried[fb]; ok {
+					continue
+				}
+				tried[fb] = struct{}{}
+				log.Infof("[cf] try impersonate fallback=%s", fb)
+				if rerr := e.xai.RecreateWithProfile(fb); rerr != nil {
+					log.Warnf("[cf] recreate %s: %v", fb, rerr)
+					continue
+				}
+				scfg, err = e.xai.FetchConfig()
+				if err == nil {
+					log.Infof("[cf] warm ok profile=%s", e.xai.Profile())
+					break
+				}
+				log.Warnf("[cf] fallback %s failed: %v", fb, err)
+				if strings.Contains(err.Error(), "connection refused") {
+					log.Warn("[cf] 仍是 connection refused，停止 fallback")
+					break
+				}
+			}
+			if err != nil && clearMode == "auto" {
+				ensureClearance("cf_blocked")
+				// rebuild client with clearance cookies
+				e.xai, err = protocol.NewClientOpts(protocol.ClientOptions{
+					Proxy:       cfg.RegisterProxy,
+					Clearance:   e.cm,
+					Impersonate: e.xai.Profile(),
+				})
+				if err != nil {
+					return err
+				}
+				scfg, err = e.xai.FetchConfig()
+			}
+		}
+	}
+	// Rebuild oauth client after clearance manager may have been attached.
+	if e.cm != nil {
+		if oc, oerr := oauth.NewClient(cfg.RegisterProxy, e.cm, time.Duration(cfg.OAuthRetrySec)*time.Second); oerr == nil {
+			e.oauth = oc
 		}
 	}
 	if err != nil {
@@ -758,6 +824,14 @@ func (e *Engine) cWorker(ctx context.Context, id int, scfg protocol.SignupConfig
 			continue
 		}
 
+		// Brief settle: brand-new SSO sometimes rejected by auth.x.ai device verify (→ sign-in / invalid_grant).
+		select {
+		case <-ctx.Done():
+			e.releaseReserve()
+			return
+		case <-time.After(2 * time.Second):
+		}
+
 		job := SSOJob{Email: q.Email, Password: q.Password, SSO: sso}
 		select {
 		case <-ctx.Done():
@@ -818,9 +892,14 @@ func (e *Engine) oauthWorker(ctx context.Context, id int) {
 		})
 		log.Startf("OAuth %s", job.Email)
 		t0 := time.Now()
+		// SSO preview for debugging (prefix only)
+		ssoPrev := job.SSO
+		if len(ssoPrev) > 24 {
+			ssoPrev = ssoPrev[:12] + "…" + ssoPrev[len(ssoPrev)-8:]
+		}
 		cred, err := e.oauth.Exchange(ctx, job.SSO)
 		if err != nil {
-			log.Warnf("OAuth fail %s: %v (%.1fs)", job.Email, err, time.Since(t0).Seconds())
+			log.Warnf("OAuth fail %s: %v (%.1fs) sso=%s", job.Email, err, time.Since(t0).Seconds(), ssoPrev)
 			e.fail.Add(1)
 			e.releaseReserve()
 			continue

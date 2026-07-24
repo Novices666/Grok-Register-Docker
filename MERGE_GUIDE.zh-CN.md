@@ -9,9 +9,9 @@
 | 项目 | 内容 |
 |---|---|
 | 上游仓库 | `https://github.com/Charles-0509/Grok-Register` |
-| 上次已审查上游提交 | `3a46f26` |
+| 上次已审查上游提交 | `2a98bf9` |
 | 本仓库最初基于的上游提交 | `a8d87bd` |
-| 提交时间 | `2026-07-23 13:36:40 +0800` |
+| 提交时间 | `2026-07-24 10:46:59 +0800` |
 
 “上次已审查上游提交”表示已经检查到该提交，不表示审查范围内的所有提交都已采用。选择性移植时，必须在同步记录中单独列出实际采用和跳过的内容。
 
@@ -94,6 +94,18 @@ docker restart grok-register
 
 ## 同步记录
 
+
+### 2026-07-24 上游同步（OAuth 严格确认 + 清障预热 2a98bf9）
+
+| 项目 | 内容 |
+|---|---|
+| 同步分支 | `sync/upstream-20260724` |
+| 审查范围 | `3a46f26..2a98bf9` |
+| 新的审查截止 | `2a98bf9` |
+| 实际移植 | `8f378de`/`3b4cc62`/`3c3de17`/`0deed4f` OAuth：严格 device approve、consent 表单解析、SSO reject 检测、Confirm 不附 CF clearance cookie、invalid_grant 重试；`1fd64ba`/`af6f1a1`/`2a98bf9` 清障：`:40080` 未监听时先起栈、默认 CLEARANCE_PROXY=privoxy、等 FS/WARP 就绪再预热、accounts/auth 优先与重试 |
+| 明确跳过 | 无（7 个提交均为 OAuth/清障核心修复，与本仓扩展兼容） |
+| 兼容调整 | `pipeline.go` 手工合并：保留 `OUTPUT_*`、`turnstileMintNeed`、`shouldRunCPAFlow`；SSO settle 2s 仅在走 OAuth/CPA 路径时执行；`oauth`/`clearance`/`prewarm.sh` 整文件采用上游 |
+| 验证结果 | `go test` config/oauth/pipeline/webui/cpa/inventory/protocol/clearance/cmd/web/logx/turnstile 通过；`GOOS=linux go build` grok/grok-web 通过；`docker compose --env-file .env.docker.example config --quiet` 通过 |
 
 ### 2026-07-23 上游同步（xauth 依赖 3a46f26）
 
