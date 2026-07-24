@@ -9,9 +9,9 @@
 | 项目 | 内容 |
 |---|---|
 | 上游仓库 | `https://github.com/Charles-0509/Grok-Register` |
-| 上次已审查上游提交 | `2a98bf9` |
+| 上次已审查上游提交 | `862a434` |
 | 本仓库最初基于的上游提交 | `a8d87bd` |
-| 提交时间 | `2026-07-24 10:46:59 +0800` |
+| 提交时间 | `2026-07-24 12:02:28 +0800` |
 
 “上次已审查上游提交”表示已经检查到该提交，不表示审查范围内的所有提交都已采用。选择性移植时，必须在同步记录中单独列出实际采用和跳过的内容。
 
@@ -94,6 +94,18 @@ docker restart grok-register
 
 ## 同步记录
 
+
+### 2026-07-24 上游同步（reoauth 重登 862a434）
+
+| 项目 | 内容 |
+|---|---|
+| 同步分支 | `sync/upstream-20260724b` |
+| 审查范围 | `2a98bf9..862a434` |
+| 新的审查截止 | `862a434` |
+| 实际移植 | `4d3349b` 新增 `grok reoauth`：解析 inspection/CPA/accounts/auth-sessions，优先 refresh_token、回退 device SSO，写出新 CPA；`e3d9931` 配置 CPA 上传时自动入库，`--upload`/`--no-upload` 覆盖；`862a434` 解析 inspection JSON 时剥离 UTF-8 BOM；`oauth.Client.Refresh` |
+| 明确跳过 | 无（3 个提交均为 reoauth 核心功能，与 Docker/WebUI/`OUTPUT_*` 无冲突） |
+| 兼容调整 | `cmd/grok/main.go` cherry-pick 冲突仅 help 文案：保留本仓「按当前输出配置计数」与默认节奏顺序，采用上游 reoauth 说明；README CLI 示例补充 `reoauth`；reoauth 上传仍跟 `CPA_UPLOAD_*`（与注册流水线 `OUTPUT_CPA_ENABLED` 约束独立，CLI 用途即 CPA 重登/入库） |
+| 验证结果 | `go test` config/oauth/pipeline/webui/cpa/inventory/protocol/reoauth/clearance/logx/turnstile/cmd/web 通过；`GOOS=linux go build` grok/grok-web 通过；`docker compose --env-file .env.docker.example config --quiet` 通过 |
 
 ### 2026-07-24 上游同步（OAuth 严格确认 + 清障预热 2a98bf9）
 
