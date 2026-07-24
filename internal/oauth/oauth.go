@@ -266,9 +266,108 @@ func (c *Client) discover(ctx context.Context) (deviceEP, tokenEP string, err er
 	return deviceEP, tokenEP, nil
 }
 
+// principalFromSSO extracts user id from session SSO JWT for device approve form.
+func principalFromSSO(sso string) string {
+	for _, key := range []string{"sub", "user_id", "userId", "uid", "id", "principal_id", "principalId"} {
+		if v := jwtClaim(sso, key); v != "" {
+			return v
+		}
+	}
+	// nested claims common on some x.ai session tokens
+	parts := strings.Split(sso, ".")
+	if len(parts) != 3 {
+		return ""
+	}
+	payload := parts[1]
+	switch len(payload) % 4 {
+	case 2:
+		payload += "=="
+	case 3:
+		payload += "="
+	}
+	raw, err := base64.URLEncoding.DecodeString(payload)
+	if err != nil {
+		raw, err = base64.RawURLEncoding.DecodeString(parts[1])
+		if err != nil {
+			return ""
+		}
+	}
+	var m map[string]any
+	if json.Unmarshal(raw, &m) != nil {
+		return ""
+	}
+	for _, nest := range []string{"user", "account", "identity", "profile"} {
+		if sub, ok := m[nest].(map[string]any); ok {
+			for _, key := range []string{"sub", "id", "user_id", "userId", "uid"} {
+				if v, ok := sub[key].(string); ok && v != "" {
+					return v
+				}
+			}
+		}
+	}
+	return ""
+}
+
+func isDeviceDone(loc string) bool {
+	if loc == "" {
+		return false
+	}
+	u, err := url.Parse(loc)
+	if err != nil {
+		return strings.Contains(loc, "/oauth2/device/done")
+	}
+	p := u.Path
+	return strings.Contains(p, "/oauth2/device/done") || strings.HasSuffix(p, "/device/done")
+}
+
+func isSignInRedirect(loc string) bool {
+	low := strings.ToLower(loc)
+	return strings.Contains(low, "/sign-in") ||
+		strings.Contains(low, "/login") ||
+		strings.Contains(low, "signin") ||
+		strings.Contains(low, "login_required")
+}
+
+func isRedirect(code int) bool {
+	return code == 301 || code == 302 || code == 303 || code == 307 || code == 308
+}
+
+func absURL(baseHost, loc string) string {
+	if loc == "" {
+		return ""
+	}
+	if strings.HasPrefix(loc, "http://") || strings.HasPrefix(loc, "https://") {
+		return loc
+	}
+	if strings.HasPrefix(loc, "/") {
+		return baseHost + loc
+	}
+	return loc
+}
+
+func authorizedBody(body string) bool {
+	low := strings.ToLower(body)
+	return strings.Contains(low, "device authorized") ||
+		strings.Contains(body, "设备已授权") ||
+		strings.Contains(low, "you have authorized") ||
+		strings.Contains(low, "device is authorized")
+}
+
 // ConfirmHTTP posts verify + approve with SSO cookie (no browser).
+// Success only when device is actually marked authorized (done path / body text).
+// Accepting arbitrary redirects was causing token poll invalid_grant (Access denied).
 func (c *Client) ConfirmHTTP(ctx context.Context, sso string, flow DeviceFlow) error {
+	sso = strings.TrimSpace(sso)
+	if sso == "" {
+		return fmt.Errorf("login_required")
+	}
 	cookie := "sso=" + sso
+
+	// Warm: open verification page so auth.x.ai sees cookie session (optional).
+	if flow.VerificationURL != "" {
+		_, _, _ = c.getWithCookie(ctx, flow.VerificationURL, cookie)
+	}
+
 	// verify
 	form := url.Values{"user_code": {flow.UserCode}}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, VerifyURL, strings.NewReader(form.Encode()))
@@ -281,8 +380,10 @@ func (c *Client) ConfirmHTTP(ctx context.Context, sso string, flow DeviceFlow) e
 		return err
 	}
 	loc := resp.Header.Get("Location")
-	_, _ = io.Copy(io.Discard, resp.Body)
+	vbody, _ := io.ReadAll(io.LimitReader(resp.Body, 64<<10))
 	_ = resp.Body.Close()
+	// Merge any Set-Cookie (session) into cookie jar string for subsequent posts.
+	cookie = mergeSetCookies(cookie, resp.Header)
 	if err := locationError(loc); err != nil {
 		if errors.Is(err, ErrRateLimited) {
 			c.TripRateLimit()
@@ -292,53 +393,259 @@ func (c *Client) ConfirmHTTP(ctx context.Context, sso string, flow DeviceFlow) e
 	if resp.StatusCode == 403 {
 		return fmt.Errorf("challenge")
 	}
-	if strings.Contains(loc, "/oauth2/device/done") {
+	if isSignInRedirect(loc) {
+		return fmt.Errorf("sso_rejected verify→sign-in (SSO cookie not accepted by auth.x.ai)")
+	}
+	if isDeviceDone(loc) {
+		c.ClearRateLimit()
 		return nil
 	}
-	// approve
-	consentRef := loc
+	if authorizedBody(string(vbody)) && isRedirect(resp.StatusCode) {
+		c.ClearRateLimit()
+		return nil
+	}
+	if !isRedirect(resp.StatusCode) && loc == "" {
+		preview := strings.TrimSpace(string(vbody))
+		if len(preview) > 120 {
+			preview = preview[:120]
+		}
+		return fmt.Errorf("device_verify_failed status=%d body=%q", resp.StatusCode, preview)
+	}
+
+	consentRef := absURL("https://accounts.x.ai", loc)
 	if consentRef == "" {
 		consentRef = "https://accounts.x.ai/oauth2/device/consent?user_code=" + url.QueryEscape(flow.UserCode)
-	} else if strings.HasPrefix(consentRef, "/") {
-		consentRef = "https://accounts.x.ai" + consentRef
 	}
+	if isSignInRedirect(consentRef) {
+		return fmt.Errorf("sso_rejected verify→%s", consentRef)
+	}
+	// Diagnostic context for operators (short).
+	_ = fmt.Sprintf("verify status=%d loc=%s", resp.StatusCode, trimLoc(loc))
+
+	// Minimal form matching historical working Python client (empty principal_id OK).
+	// Then overlay non-empty fields from consent HTML (csrf / principal_id).
 	aform := url.Values{
 		"user_code":      {flow.UserCode},
 		"action":         {"allow"},
 		"principal_type": {"User"},
 		"principal_id":   {""},
 	}
-	req2, err := http.NewRequestWithContext(ctx, http.MethodPost, ApproveURL, strings.NewReader(aform.Encode()))
-	if err != nil {
-		return err
+	if pid := principalFromSSO(sso); pid != "" {
+		aform.Set("principal_id", pid)
 	}
-	c.setFormHeaders(req2, consentRef, cookie)
-	resp2, err := c.http.Do(req2)
-	if err != nil {
-		return err
-	}
-	aloc := resp2.Header.Get("Location")
-	body, _ := io.ReadAll(io.LimitReader(resp2.Body, 1<<20))
-	_ = resp2.Body.Close()
-	if err := locationError(aloc); err != nil {
-		if errors.Is(err, ErrRateLimited) {
-			c.TripRateLimit()
+	if fields, htmlCookie := c.loadConsentForm(ctx, consentRef, cookie); len(fields) > 0 {
+		cookie = htmlCookie
+		for k, vs := range fields {
+			if k == "action" {
+				continue // never take empty/deny from page
+			}
+			if len(vs) > 0 && vs[0] != "" {
+				aform.Set(k, vs[0])
+			}
 		}
-		return err
+		aform.Set("action", "allow")
+		if aform.Get("user_code") == "" {
+			aform.Set("user_code", flow.UserCode)
+		}
+		if aform.Get("principal_type") == "" {
+			aform.Set("principal_type", "User")
+		}
 	}
-	text := strings.ToLower(string(body))
-	if strings.Contains(text, "device authorized") || strings.Contains(string(body), "设备已授权") {
-		c.ClearRateLimit()
-		return nil
+
+	// Try approve; if incomplete, one more attempt with only core fields (no HTML overlay).
+	for attempt, form := range []url.Values{aform, {
+		"user_code":      {flow.UserCode},
+		"action":         {"allow"},
+		"principal_type": {"User"},
+		"principal_id":   {aform.Get("principal_id")},
+	}} {
+		req2, err := http.NewRequestWithContext(ctx, http.MethodPost, ApproveURL, strings.NewReader(form.Encode()))
+		if err != nil {
+			return err
+		}
+		c.setFormHeaders(req2, consentRef, cookie)
+		// Also send Origin as auth.x.ai sometimes required for same-site form posts
+		req2.Header.Set("Origin", "https://accounts.x.ai")
+		resp2, err := c.http.Do(req2)
+		if err != nil {
+			return err
+		}
+		aloc := resp2.Header.Get("Location")
+		body, _ := io.ReadAll(io.LimitReader(resp2.Body, 1<<20))
+		_ = resp2.Body.Close()
+		cookie = mergeSetCookies(cookie, resp2.Header)
+		if err := locationError(aloc); err != nil {
+			if errors.Is(err, ErrRateLimited) {
+				c.TripRateLimit()
+			}
+			return fmt.Errorf("device_approve: %w", err)
+		}
+		if isSignInRedirect(aloc) {
+			return fmt.Errorf("sso_rejected approve→sign-in")
+		}
+		if authorizedBody(string(body)) || isDeviceDone(aloc) {
+			c.ClearRateLimit()
+			return nil
+		}
+		if isRedirect(resp2.StatusCode) && aloc != "" {
+			next := absURL("https://auth.x.ai", aloc)
+			if !strings.Contains(next, "auth.x.ai") && !strings.Contains(next, "accounts.x.ai") {
+				next = absURL("https://accounts.x.ai", aloc)
+			}
+			if isDeviceDone(next) {
+				c.ClearRateLimit()
+				return nil
+			}
+			if isSignInRedirect(next) {
+				return fmt.Errorf("sso_rejected approve-redirect→sign-in")
+			}
+			if st, b, err := c.getWithCookie(ctx, next, cookie); err == nil {
+				if authorizedBody(b) || isDeviceDone(next) {
+					c.ClearRateLimit()
+					return nil
+				}
+				_ = st
+			}
+			// retry once with minimal form if first attempt used HTML overlay
+			if attempt == 0 && len(aform) > 4 {
+				continue
+			}
+			return fmt.Errorf("device_approve_incomplete status=%d loc=%q", resp2.StatusCode, aloc)
+		}
+		if resp2.StatusCode == 403 {
+			return fmt.Errorf("challenge")
+		}
+		if strings.Contains(strings.ToLower(string(body)), "invalid action") {
+			if attempt == 0 {
+				continue
+			}
+			return fmt.Errorf("consent_invalid_action")
+		}
+		if attempt == 0 {
+			continue
+		}
+		preview := strings.TrimSpace(string(body))
+		if len(preview) > 160 {
+			preview = preview[:160]
+		}
+		return fmt.Errorf("unknown_page status=%d loc=%q body=%q", resp2.StatusCode, aloc, preview)
 	}
-	if resp2.StatusCode/100 == 2 || strings.Contains(aloc, "device/done") || (aloc != "" && locationError(aloc) == nil) {
-		c.ClearRateLimit()
-		return nil
+	return fmt.Errorf("device_approve_failed")
+}
+
+func mergeSetCookies(cookie string, h http.Header) string {
+	// Keep existing; append new name=value from Set-Cookie (simple).
+	out := cookie
+	for _, sc := range h.Values("Set-Cookie") {
+		part := strings.SplitN(sc, ";", 2)[0]
+		if !strings.Contains(part, "=") {
+			continue
+		}
+		name := strings.SplitN(part, "=", 2)[0]
+		// replace existing name=
+		found := false
+		segs := strings.Split(out, "; ")
+		for i, s := range segs {
+			if strings.HasPrefix(s, name+"=") {
+				segs[i] = part
+				found = true
+			}
+		}
+		if found {
+			out = strings.Join(segs, "; ")
+		} else if out == "" {
+			out = part
+		} else {
+			out = out + "; " + part
+		}
 	}
-	if resp2.StatusCode == 403 {
-		return fmt.Errorf("challenge")
+	return out
+}
+
+func (c *Client) getWithCookie(ctx context.Context, rawURL, cookie string) (int, string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
+	if err != nil {
+		return 0, "", err
 	}
-	return fmt.Errorf("unknown_page status=%d", resp2.StatusCode)
+	req.Header.Set("User-Agent", c.ua)
+	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+	req.Header.Set("Cookie", cookie) // SSO only — no clearance jar on OAuth pages
+	req.Header.Set("Sec-Fetch-Site", "same-site")
+	req.Header.Set("Sec-Fetch-Mode", "navigate")
+	req.Header.Set("Sec-Fetch-Dest", "document")
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return 0, "", err
+	}
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 256<<10))
+	_ = resp.Body.Close()
+	return resp.StatusCode, string(body), nil
+}
+
+// loadConsentForm GETs consent page and extracts form fields (principal_id, csrf, etc.).
+func (c *Client) loadConsentForm(ctx context.Context, consentURL, cookie string) (url.Values, string) {
+	st, html, err := c.getWithCookie(ctx, consentURL, cookie)
+	if err != nil || st >= 400 {
+		return nil, cookie
+	}
+	fields := parseHTMLFormFields(html)
+	return fields, cookie
+}
+
+func parseHTMLFormFields(html string) url.Values {
+	out := url.Values{}
+	// input ... name="..." ... value="..." (order may vary)
+	lower := html
+	// naive scan for name= and value= pairs on input tags
+	for i := 0; i < len(html); {
+		idx := strings.Index(strings.ToLower(lower[i:]), "<input")
+		if idx < 0 {
+			break
+		}
+		i += idx
+		end := strings.Index(lower[i:], ">")
+		if end < 0 {
+			break
+		}
+		tag := html[i : i+end]
+		i += end + 1
+		name := attrValue(tag, "name")
+		if name == "" {
+			continue
+		}
+		val := attrValue(tag, "value")
+		out.Set(name, val)
+	}
+	return out
+}
+
+func attrValue(tag, attr string) string {
+	// attr="..." or attr='...'
+	low := strings.ToLower(tag)
+	key := strings.ToLower(attr) + "="
+	j := strings.Index(low, key)
+	if j < 0 {
+		return ""
+	}
+	rest := tag[j+len(key):]
+	if rest == "" {
+		return ""
+	}
+	q := rest[0]
+	if q == '"' || q == '\'' {
+		rest = rest[1:]
+		k := strings.IndexByte(rest, q)
+		if k < 0 {
+			return ""
+		}
+		return rest[:k]
+	}
+	// unquoted
+	k := strings.IndexAny(rest, " \t>/")
+	if k < 0 {
+		return rest
+	}
+	return rest[:k]
 }
 
 func locationError(loc string) error {
@@ -366,12 +673,14 @@ func (c *Client) setFormHeaders(req *http.Request, referer, cookie string) {
 	req.Header.Set("Origin", "https://accounts.x.ai")
 	req.Header.Set("Referer", referer)
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	// OAuth device verify/approve: ONLY session SSO. Do NOT append FlareSolverr/CF
+	// clearance cookies — they can poison auth.x.ai and yield invalid_grant Access denied.
 	req.Header.Set("Cookie", cookie)
-	if c.clear != nil {
-		if h := c.clear.CookieHeader(); h != "" {
-			req.Header.Set("Cookie", cookie+"; "+h)
-		}
-	}
+	req.Header.Set("Sec-Fetch-Site", "same-site")
+	req.Header.Set("Sec-Fetch-Mode", "navigate")
+	req.Header.Set("Sec-Fetch-Dest", "document")
+	req.Header.Set("Sec-Fetch-User", "?1")
+	req.Header.Set("Upgrade-Insecure-Requests", "1")
 }
 
 func (c *Client) PollToken(ctx context.Context, flow DeviceFlow) (Credential, error) {
@@ -406,6 +715,7 @@ func (c *Client) PollToken(ctx context.Context, flow DeviceFlow) (Credential, er
 			return credentialFrom(doc, flow.TokenEndpoint)
 		}
 		errCode, _ := doc["error"].(string)
+		errDesc, _ := doc["error_description"].(string)
 		switch errCode {
 		case "authorization_pending":
 			// continue
@@ -415,11 +725,20 @@ func (c *Client) PollToken(ctx context.Context, flow DeviceFlow) (Credential, er
 			return Credential{}, fmt.Errorf("oauth_denied")
 		case "expired_token":
 			return Credential{}, fmt.Errorf("oauth_expired")
+		case "invalid_grant":
+			// Device not actually authorized (confirm incomplete / denied / SSO mismatch).
+			if errDesc != "" {
+				return Credential{}, fmt.Errorf("oauth_rejected: invalid_grant (%s) — device not authorized on auth.x.ai", errDesc)
+			}
+			return Credential{}, fmt.Errorf("oauth_rejected: invalid_grant — device not authorized on auth.x.ai")
 		default:
 			if errCode != "" {
+				if errDesc != "" {
+					return Credential{}, fmt.Errorf("oauth_rejected: %s (%s)", errCode, errDesc)
+				}
 				return Credential{}, fmt.Errorf("oauth_rejected: %s", errCode)
 			}
-			return Credential{}, fmt.Errorf("oauth_rejected status=%d", resp.StatusCode)
+			return Credential{}, fmt.Errorf("oauth_rejected status=%d body=%s", resp.StatusCode, truncateBody(body, 120))
 		}
 		select {
 		case <-ctx.Done():
@@ -495,8 +814,23 @@ func jwtClaim(token, key string) string {
 	return ""
 }
 
+func truncateBody(b []byte, n int) string {
+	s := strings.TrimSpace(string(b))
+	if len(s) <= n {
+		return s
+	}
+	return s[:n]
+}
+
+func trimLoc(s string) string {
+	if len(s) <= 120 {
+		return s
+	}
+	return s[:120] + "…"
+}
+
 // Exchange is convenience: start flow + confirm HTTP + poll.
-// On rate_limited / device 429, wait cooldown and retry (keeps good SSO).
+// On rate_limited / device 429 / invalid_grant, retry with a fresh device code.
 func (c *Client) Exchange(ctx context.Context, sso string) (Credential, error) {
 	var last error
 	for attempt := 0; attempt < 3; attempt++ {
@@ -516,9 +850,24 @@ func (c *Client) Exchange(ctx context.Context, sso string) (Credential, error) {
 			if errors.Is(err, ErrRateLimited) && attempt < 2 {
 				continue
 			}
+			// challenge / unknown_page: one more full attempt with new device code
+			if attempt < 2 && (strings.Contains(err.Error(), "challenge") ||
+				strings.Contains(err.Error(), "unknown_page") ||
+				strings.Contains(err.Error(), "device_verify")) {
+				continue
+			}
 			return Credential{}, err
 		}
-		return c.PollToken(ctx, flow)
+		cred, err := c.PollToken(ctx, flow)
+		if err != nil {
+			last = err
+			// invalid_grant: consent did not stick — new device flow
+			if attempt < 2 && strings.Contains(err.Error(), "invalid_grant") {
+				continue
+			}
+			return Credential{}, err
+		}
+		return cred, nil
 	}
 	if last == nil {
 		last = fmt.Errorf("oauth_failed")
