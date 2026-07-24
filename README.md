@@ -131,6 +131,7 @@ docker compose exec grok-register grok status
 docker compose exec grok-register grok logs
 docker compose exec grok-register grok stop
 docker compose exec grok-register grok upload
+docker compose exec grok-register grok reoauth /path/to/inspection-or-cpa
 docker compose exec grok-register grok help
 ```
 
@@ -316,6 +317,8 @@ grok logs -f
 grok stop
 grok config
 grok upload
+# 对 inspection / CPA / accounts 重登并写出新 CPA（优先 refresh_token）
+grok reoauth ./quota_exhausted.json --thread 2
 ```
 
 原生运行还需要 Python、Playwright/CloakBrowser，以及可用的代理或清障服务。相关安装脚本仍保留在 `scripts/install.sh`，使用本仓库版本时应明确指定仓库：
